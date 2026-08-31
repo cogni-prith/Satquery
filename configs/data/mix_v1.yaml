@@ -1,0 +1,47 @@
+# Default training mix: 40 percent BigEarthNet.txt, 40 percent VRSBench, 20 percent CDVQA.
+#
+# Weights must sum to 1.0; data/mixer.py::load_mix_spec makes that a hard error, because
+# a mix that trains on a different distribution from the one written down is invisible
+# in the loss curve.
+name: mix_v1
+seed: 1337
+
+components:
+  - name: bigearthnet_txt
+    weight: 0.40
+    config: bigearthnet_txt.yaml     # resolved relative to this file
+    splits: [train]
+    options:
+      tasks: [caption, vqa_binary, vqa_multiple_choice, referring_expression]
+
+  - name: vrsbench
+    weight: 0.40
+    config: vrsbench.yaml
+    splits: [train]
+    options:
+      # All three subsets, so captioning, VQA and grounding are all adapted.
+      subsets: [caption, vqa, referring]
+
+  - name: cdvqa
+    weight: 0.20
+    config: cdvqa.yaml
+    splits: [train]
+
+# RSVQA is evaluation only and is deliberately absent from the mix: training on it
+# would make its reported accuracy meaningless.
+
+# Aggressive random resampling across scales. This is the primary defence against the
+# central risk of the project: training data is Sentinel at 10 m, the hidden ISRO
+# evaluation set is Cartosat-2S at sub-metre to roughly 2 m plus RISAT SAR. That is
+# more than an order of magnitude. A model that only ever saw 10 m tiles has no reason
+# to generalise, so every sample is randomly re-rendered onto the frozen GSD ladder and
+# its instruction is re-prefixed with the matching <gsd:...m> token.
+#
+# scales_m must be a subset of CANONICAL_GSD_SCALES_M in preprocess/constants.py.
+# Weighting leans fine because that is where the evaluation set lives, while keeping
+# real mass at 10 m where the native data actually is.
+scale_policy:
+  enabled: true
+  scales_m:      [0.5,  1.0,  2.0,  5.0,  10.0, 20.0]
+  probabilities: [0.15, 0.20, 0.20, 0.15, 0.20, 0.10]
+  apply_probability: 0.8     # 20 percent of samples stay at native resolution

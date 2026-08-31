@@ -1,0 +1,59 @@
+# EarthDial-4B, non-optical checkpoint: SAR, multispectral and bi-temporal input.
+#
+# VERIFIED against the HuggingFace Hub. The author publishes exactly three EarthDial
+# checkpoints -- EarthDial_4B_RGB, EarthDial_4B_MS and EarthDial_4B_Methane_UHI -- so
+# `_MS` is the non-optical entry. There is no separate SAR-only or bi-temporal-only
+# checkpoint; SAR reaches this model as the frozen pseudo-RGB rendering produced by
+# preprocess/sar.py, which is the whole reason that rendering is frozen.
+#
+# Same missing-remote-code caveat as the RGB config: run `make fetch-model` first.
+#
+# Top-level keys map one-to-one onto satquery.models.vlm.backbone.BackboneConfig.
+
+hf_repo_id: akshaydudhane/EarthDial_4B_MS
+revision: null
+dtype: bfloat16
+device_map: auto
+load_in_4bit: true
+image_size: 448             # identical to the RGB config; a mismatch would split the mix
+max_tiles: 6                # MEASURED, and TRAIN/EVAL-COUPLED. Read by both the training
+                            # collator and the inference path, on purpose: tiling
+                            # differently at train and eval time is exactly the drift
+                            # the frozen constants exist to prevent.
+                            #
+                            # 6 is the checkpoint's own max_dynamic_patch. Each tile is
+                            # 256 image tokens; 6 + thumbnail = 1792. Measured peak VRAM
+                            # for a real training step on an 8 GB RTX 4060, gradient
+                            # checkpointing on:
+                            #     1 tile  ->  3.44 GB      5 tiles ->  4.75 GB
+                            #     3 tiles ->  3.93 GB      7 tiles ->  5.93 GB
+                            # So the full budget fits with ~2.2 GB spare.
+                            #
+                            # Note this has NO effect on VRSBench: InternVL selects the
+                            # tile grid by aspect ratio, and a square 512x512 resolves to
+                            # 1x1 whatever the budget. It matters for non-square and
+                            # larger scenes -- 2:1 gives 3 tiles, 2048x2048 gives 5 --
+                            # i.e. for the Cartosat imagery in the hidden eval set.
+
+trust_remote_code: true
+adapter_path: null          # set to the LoRA output dir under $SATQUERY_ARTIFACT_ROOT
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+inference:
+  max_new_tokens: 128
+  temperature: 0.0
+  num_beams: 1

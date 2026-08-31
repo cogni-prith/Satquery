@@ -1,0 +1,34 @@
+# CDVQA -- bi-temporal change VQA.
+#
+# Judging row served: "bi-temporal change (mandatory)".
+#
+# The answer set is CLOSED over six classes. Their canonical spelling and, critically,
+# their ORDER live in preprocess/constants.py::CDVQA_ANSWERS and are frozen there --
+# that tuple is the classification head's output layer ordering, so a permutation
+# silently scrambles a reloaded checkpoint. They are deliberately NOT retyped here.
+#
+# Routing doctrine: do not send CDVQA through the VLM alone. change.vqa_head produces
+# the scored closed-set answer; vlm.change_description produces prose. Report both.
+name: cdvqa
+
+about:
+  url: https://github.com/YZHJessica/CDVQA
+  pairs: 2968
+  qa_pairs: 122000        # "122k+" per CLAUDE.md; exact figure TBD
+  derived_from: SECOND public subset
+  licence: TBD - verify before release
+
+root: cdvqa
+
+split: train
+splits: [train, test_1, test_2]     # two official test splits, both are scored
+
+modalities: [optical_rgb]
+image_size: 512
+bi_temporal: true
+
+# Reported on test_1 and test_2 separately, never averaged into one headline number.
+metrics: [exact_match_accuracy]
+answer_normalisation: cdvqa
+
+checksums: {}
