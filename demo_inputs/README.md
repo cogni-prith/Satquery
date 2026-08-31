@@ -1,50 +1,58 @@
-# Demo inputs
+# Demo inputs — real Sentinel-2
 
-Two dates of one synthetic 512×512 scene. Upload both to the UI and ask about change;
-upload one and ask about land cover.
+Two acquisitions of **one BigEarthNet cell**, exported from the reBEN LMDB. Real
+Sentinel-2 L2A surface reflectance, not drawn into an array.
 
-| file | scene |
-|---|---|
-| `demo_input_tif_1.tif` | reservoir at 60 px radius |
-| `demo_input_tif_2.tif` | the same scene, reservoir grown to 92 px |
+| file | acquisition | source patch |
+|---|---|---|
+| `demo_input_tif_1.tif` | 2017-10-02 | `S2A_MSIL2A_20171002T112111_N9999_R037_T29SNB_27_09` |
+| `demo_input_tif_2.tif` | 2018-03-26 | `S2B_MSIL2A_20180326T112109_N9999_R037_T29SNB_27_09` |
 
-4 bands (`B04`, `B03`, `B08`, `B11`), EPSG:32643, **10 m GSD** written into the affine
-transform — which is what lets the answer be in hectares rather than pixels.
+120×120 px, 4 bands (`B04` `B03` `B08` `B11`), EPSG:32629, **10 m GSD**. Tile T29SNB,
+cell 27_09 — Alentejo, Portugal. The two dates straddle the end of the 2017 Iberian
+drought: the reservoir in this cell refills over the winter. CORINE labels the cell
+*Agro-forestry areas, Broad-leaved forest, Inland waters, Transitional woodland/shrub*.
 
-## Ground truth
+Regenerate with `PYTHONPATH=src python scripts/export_demo_inputs.py` (reads the mounted
+LMDB, downloads nothing).
 
-Synthetic on purpose: you already know the right answer, so you can tell whether the
-system computed it or guessed.
+## What it should say
 
-| quantity | truth |
-|---|---|
-| water, date 1 | 1,127,700 m² (112.77 ha) |
-| water, date 2 | 2,656,100 m² (265.61 ha) |
-| water, change | +1,528,400 m² (+152.84 ha, +135.5%) |
-| built-up, both dates | 1,260,000 m² — **change must be 0** |
+| question | answer | check |
+|---|---|---|
+| "How has the water body changed between these two dates?" | water increased by **31.87 ha** (118.1%) | 269,900 → 588,600 m², matching NDWI computed directly on the bands |
+| "Describe the land cover" (date 1) | built up 39.7%, vegetation 39.4%, water 18.7% | water 18.7% is right; see the caveat below |
+| "Describe the land cover" (date 2) | water 40.9% | the reservoir after the rains |
 
-Measured through the running system: water 1,127,900 → 2,656,300, delta 1,528,400 m²
-(+135.5%); built-up delta exactly 0. The few-hundred-m² offsets on the endpoints are the
-sensor noise the generator adds, and they cancel in the difference.
+**Water is the trustworthy number here.** NDWI is a genuinely reliable water detector and
+the measured change matches the imagery.
 
-The built-up row is the one that matters. NDBI is high over open water as well as
-concrete, so before the water mask was subtracted this scene reported the growing lake as
-a construction boom. If a change ever reappears there, that bug is back.
+## Two honest caveats, both surfaced as warnings
 
-## Questions to try
+**Built-up is an upper bound.** NDBI separates "bright in SWIR, dark in NIR" from
+everything else, and dry bare soil and harvested cropland look exactly like concrete under
+that test. This cell has no urban CORINE class at all, and the tool still reports 39.7%
+built-up. Open water and vegetation are masked out — both are definitionally not built-up
+— but no arithmetic can tell a car park from a ploughed field in the Alentejo in October.
+Read it as "built-up or bare ground". This is precisely the gap a trained
+`LandCoverSegmenter` closes, and the reason it is next.
 
-- "How has the water body changed between these two dates?" → *water increased by 1.53 km²*
-- "How much has the built-up area changed?" → *built up is unchanged*
-- "Describe the land cover in this image" (one file) → proportions, with a warning that
-  the indices overlap and need not sum to 100
+The threshold was deliberately **not** retuned to make this scene look better. Fitting a
+frozen constant to one demo patch is how train/eval drift gets introduced.
 
-Regenerate with `python scripts/make_demo_inputs.py`. It prints the ground truth again.
+**The percentages overlap.** NDWI, NDBI and NDVI are independent thresholds, not a
+partition, so a pixel can satisfy two and the numbers need not sum to 100.
+
+## Georeferencing
+
+Pixel size is exactly 10 m and the CRS is the tile's true UTM zone, so **every area the
+system reports is correct**. The origin is nominal: BigEarthNet ships no per-patch affine
+transform, and deriving one from the MGRS tile identifier means reimplementing the 100 km
+square lettering, which is easy to get subtly and invisibly wrong. Nothing the tool
+computes depends on the origin.
 
 ## What will not work
 
-Any question needing a learned model — VQA, captioning, object counting, grounding,
-semantic change. Those tools are unbound because their weights do not exist yet, and the
-UI will say so rather than answer.
-
-An RGB screenshot (PNG or JPEG) is refused: it has no near-infrared band, so no spectral
-index applies.
+Any question needing a learned model — VQA, captioning, counting, grounding, semantic
+change. Those tools are unbound because no weights exist yet; the UI says so rather than
+answering. An RGB screenshot is refused: no near-infrared band, so no index applies.

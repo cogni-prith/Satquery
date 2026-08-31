@@ -62,8 +62,12 @@ class DeterministicIndexTool(BaseTool):
         # growing lake reads as a construction boom. Standard practice is to subtract the
         # water mask, which means NDWI must be computed whenever NDBI is, whether or not
         # the user asked about water.
-        if "ndbi" in which and "ndwi" not in which:
-            which.insert(0, "ndwi")
+        if "ndbi" in which:
+            # NDWI to subtract open water, NDVI to subtract vegetation. Both are needed
+            # whether or not the user asked about water or vegetation.
+            for helper in ("ndwi", "ndvi"):
+                if helper not in which:
+                    which.insert(0, helper)
         warnings: list[str] = []
         config = infer_input_config_from_images(request)
 
@@ -108,6 +112,22 @@ class DeterministicIndexTool(BaseTool):
                             "thresholds; open water is bright in SWIR and is excluded "
                             "from built-up rather than double counted"
                         )
+                if "ndvi" in maps:
+                    built_up = built_up & ~vegetation_mask(maps["ndvi"])
+                built["built_up"] = built_up
+                if np.count_nonzero(built_up):
+                    # The honest caveat, and the reason a learned segmenter is worth
+                    # training. NDBI separates "bright in SWIR, dark in NIR" from
+                    # everything else; dry bare soil and harvested fields look exactly
+                    # like concrete under that test. Masking water and vegetation removes
+                    # what is definitionally not built-up, but nothing in the arithmetic
+                    # can tell a car park from a ploughed field.
+                    local.append(
+                        "built-up is an UPPER BOUND: NDBI cannot separate impervious "
+                        "surface from dry bare soil or harvested cropland, which have "
+                        "the same spectral signature. Treat it as 'built-up or bare "
+                        "ground'."
+                    )
                 built["built_up"] = built_up
             if "ndvi" in maps:
                 built["vegetation"] = vegetation_mask(maps["ndvi"])
