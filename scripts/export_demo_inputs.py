@@ -33,13 +33,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 #: The cell, and the two acquisitions of it.
 PATCHES = {
-    "demo_input_tif_1": "S2A_MSIL2A_20171002T112111_N9999_R037_T29SNB_27_09",
-    "demo_input_tif_2": "S2B_MSIL2A_20180326T112109_N9999_R037_T29SNB_27_09",
+    "date_1_2017-10-02": "S2A_MSIL2A_20171002T112111_N9999_R037_T29SNB_27_09",
+    "date_2_2018-03-26": "S2B_MSIL2A_20180326T112109_N9999_R037_T29SNB_27_09",
 }
 LMDB = Path("/media/cyborg-prithwish/Expansion/satquery-data/bigearthnet_lmdb")
 
 #: Written in this order, named so the index code finds them by name rather than position.
-BANDS = ("B04", "B03", "B08", "B11")
+BANDS = ("B02", "B03", "B04", "B08", "B11")
 GSD_M = 10.0
 #: UTM zone 29N, the true CRS of tile T29SNB. See the note above about the origin.
 CRS = "EPSG:32629"
@@ -65,6 +65,37 @@ def read_patch(store, patch_id: str) -> np.ndarray:
             array = np.repeat(np.repeat(array, factor, axis=0), factor, axis=1)
         bands.append(array)
     return np.stack(bands)
+
+
+def write_quicklook(path: Path, stack: np.ndarray) -> Path:
+    """Write a human-viewable PNG: true colour on the left, detected water on the right.
+
+    Left is B04/B03/B02 as red/green/blue -- what the scene looks like. Right paints every
+    pixel the tool counted as water.
+
+    The GeoTIFFs are four-band float32 and most image viewers will not open them, so
+    "check it yourself" needs a picture. The right panel paints every pixel the tool
+    counted as water, which is the actual claim being made -- a true-colour thumbnail
+    alone would show you the scene without showing you the answer.
+    """
+    from PIL import Image
+
+    from satquery.preprocess.indices import ndwi, water_mask
+    from satquery.preprocess.optical import stretch_to_uint8
+
+    blue, green, red, nir = stack[0], stack[1], stack[2], stack[3]
+    rgb = np.ascontiguousarray(stretch_to_uint8(np.stack([red, green, blue])).transpose(1, 2, 0))
+
+    overlay = rgb.copy()
+    water = water_mask(ndwi(green, nir))
+    overlay[water] = (0, 140, 255)  # the pixels the answer is counting
+
+    gap = np.full((rgb.shape[0], 4, 3), 255, dtype=np.uint8)
+    panel = np.concatenate([rgb, gap, overlay], axis=1)
+    Image.fromarray(panel).resize((panel.shape[1] * 3, panel.shape[0] * 3), Image.NEAREST).save(
+        path
+    )
+    return path
 
 
 def main() -> int:
@@ -101,7 +132,9 @@ def main() -> int:
                 dst.set_band_description(index, name)
             dst.update_tags(SOURCE_PATCH_ID=patch_id, SOURCE_DATASET="BigEarthNet-V2 (reBEN)")
 
-        green, nir = stack[1], stack[2]
+        write_quicklook(out / f"{stem}_preview.png", stack)
+
+        green, nir = stack[1], stack[3]
         ndwi = (green - nir) / (green + nir + 1e-10)
         water_px = int(np.count_nonzero(ndwi > 0.0))
         print(

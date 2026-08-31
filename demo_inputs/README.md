@@ -5,16 +5,30 @@ Sentinel-2 L2A surface reflectance, not drawn into an array.
 
 | file | acquisition | source patch |
 |---|---|---|
-| `demo_input_tif_1.tif` | 2017-10-02 | `S2A_MSIL2A_20171002T112111_N9999_R037_T29SNB_27_09` |
-| `demo_input_tif_2.tif` | 2018-03-26 | `S2B_MSIL2A_20180326T112109_N9999_R037_T29SNB_27_09` |
+| `date_1_2017-10-02.tif` | 2017-10-02 | `S2A_MSIL2A_20171002T112111_N9999_R037_T29SNB_27_09` |
+| `date_2_2018-03-26.tif` | 2018-03-26 | `S2B_MSIL2A_20180326T112109_N9999_R037_T29SNB_27_09` |
 
-120×120 px, 4 bands (`B04` `B03` `B08` `B11`), EPSG:32629, **10 m GSD**. Tile T29SNB,
+Upload **date 1 first, then date 2** — the order is the before/after.
+
+120×120 px, 5 bands (`B02` `B03` `B04` `B08` `B11`), EPSG:32629, **10 m GSD**. Tile T29SNB,
 cell 27_09 — Alentejo, Portugal. The two dates straddle the end of the 2017 Iberian
 drought: the reservoir in this cell refills over the winter. CORINE labels the cell
 *Agro-forestry areas, Broad-leaved forest, Inland waters, Transitional woodland/shrub*.
 
 Regenerate with `PYTHONPATH=src python scripts/export_demo_inputs.py` (reads the mounted
 LMDB, downloads nothing).
+
+## See it for yourself
+
+`date_1_2017-10-02_preview.png` and `date_2_2018-03-26_preview.png` — open these in any
+image viewer. Left panel is true colour (B04/B03/B02); right panel paints every pixel the
+tool counted as water, so you are looking at the actual claim rather than just the scene.
+
+In October the reservoir is a set of narrow arms with wide pale shorelines exposed. In
+March those shorelines are under water. That is the 31.87 ha the system reports.
+
+The previews are for your eyes only — upload the `.tif` files, not the PNGs. A PNG has no
+near-infrared band and the tool will refuse it, which is the correct behaviour.
 
 ## What it should say
 
