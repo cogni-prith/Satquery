@@ -1,0 +1,39 @@
+# BigEarthNet.txt -- the primary remote sensing adaptation corpus.
+#
+# Judging row served: "RS adaptation of a vision or VL component". This is the corpus
+# the LoRA fine-tune is built on, so it carries the largest single share of the mix.
+name: bigearthnet_txt
+
+about:
+  url: https://txt.bigearth.net
+  # UNVERIFIED. The arXiv id below comes from CLAUDE.md and has not been confirmed
+  # against arXiv. The sequence number is implausibly high for a single month; do not
+  # cite it in a submission until someone has opened the page.
+  arxiv: "2603.29630 (UNVERIFIED)"
+  built_on: BigEarthNet v2.0 (reBEN)
+  pairs: 464044          # co-registered Sentinel-1 and Sentinel-2 pairs
+  annotations: 9600000   # approximate, per CLAUDE.md
+  tasks_upstream: 15
+  countries: 10
+  licence: TBD - verify before release
+
+# Path relative to $SATQUERY_DATA_ROOT. Never absolute; see utils/paths.py.
+root: bigearthnet_txt
+
+split: train
+splits: [train, validation, test]
+
+# Subset of BIGEARTHNET_TXT_TASKS in data/datasets/bigearthnet_txt.py.
+tasks: [caption, vqa_binary, vqa_multiple_choice, referring_expression]
+
+modalities: [multispectral, sar]
+gsd_m: 10.0
+image_size: 120        # reBEN patches are 120x120 at 10 m
+
+# Canonical order comes from preprocess/constants.py; listed here only to record which
+# of the ten bands this corpus actually ships.
+bands: [B02, B03, B04, B08, B05, B06, B07, B8A, B11, B12]
+sar_bands: [VV, VH]
+
+# scripts/download_datasets.py fills and verifies these. Empty means "not yet checked".
+checksums: {}
