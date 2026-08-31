@@ -16,6 +16,10 @@ components:
       # column. The earlier names here were invented before the corpus
       # was in hand, and would have silently matched nothing.
       tasks: [captioning, binary, mcq, "bounding box"]
+      # Capped by PATCH, not by row. The corpus is ordered by patch with ~17
+      # annotations each, so a row-stride lands on a new patch almost every
+      # time and every first touch costs a seek on the LMDB's spinning drive.
+      max_patches: 3000
 
   - name: vrsbench
     weight: 0.40

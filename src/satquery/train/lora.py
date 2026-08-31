@@ -379,9 +379,16 @@ def build_datasets(cfg: LoraTrainConfig) -> tuple[Any, Any | None]:
     from satquery.data.mixer import load_mix_spec
 
     spec = load_mix_spec(cfg.resolved_data_config())
-    builders = {"vrsbench": _build_vrsbench, "cdvqa": _build_cdvqa}
+    builders = {
+        "bigearthnet_txt": _build_bigearthnet_txt,
+        "vrsbench": _build_vrsbench,
+        "cdvqa": _build_cdvqa,
+    }
+
+    from satquery.data.mixer import ConcatSampleDataset
 
     available: list[Any] = []
+    pooled: dict[str, Any] = {}
     honoured: dict[str, float] = {}
     for component in spec.components:
         builder = builders.get(component.name)
@@ -396,6 +403,10 @@ def build_datasets(cfg: LoraTrainConfig) -> tuple[Any, Any | None]:
             # continues on what IS available rather than refusing to start.
             _LOG.warning("mix component %r skipped: %s", component.name, exc)
             continue
+        # Views WITHIN one component are pooled; components are mixed BETWEEN by weight.
+        # Pooling here rather than globally is what lets the declared weights mean what
+        # they say -- see the note below on why concatenation alone would not.
+        pooled[component.name] = parts[0] if len(parts) == 1 else ConcatSampleDataset(parts)
         available.extend(parts)
         honoured[component.name] = component.weight
 
@@ -420,9 +431,19 @@ def build_datasets(cfg: LoraTrainConfig) -> tuple[Any, Any | None]:
             spec.weights,
         )
 
-    from satquery.data.mixer import ConcatSampleDataset
+    # Weighted, not concatenated. Concatenation samples in proportion to dataset SIZE,
+    # and the components differ by two orders of magnitude -- BigEarthNet.txt alone is
+    # 4.7M rows against VRSBench's 37k -- so a concatenated "40/40/20" would in fact be
+    # about 99% BigEarthNet while every log line still reported the declared weights.
+    from satquery.data.mixer import MixedDataset, MixSpec
 
-    train = ConcatSampleDataset(available)
+    honoured_spec = MixSpec(
+        name=spec.name,
+        components=[c for c in spec.components if c.name in pooled],
+        scale_policy=spec.scale_policy,
+        seed=spec.seed,
+    )
+    train = MixedDataset(honoured_spec, components=pooled)
     eval_dataset = _build_eval_view(cfg)
     return train, eval_dataset
 
@@ -444,6 +465,34 @@ def _build_cdvqa(component: Any) -> list[Any]:
 
     view = CDVQADataset(split="train")
     len(view)
+    return [view]
+
+
+def _build_bigearthnet_txt(component: Any) -> list[Any]:
+    """One view over the BigEarthNet.txt annotation table.
+
+    Capped by `options.max_rows`, for a reason specific to this corpus rather than
+    generic caution. The imagery lives in an LMDB on a spinning USB drive, where random
+    reads run about a thousand times slower than sequential ones; every distinct patch a
+    row references costs a seek the first time it is materialised. The cap bounds how many
+    distinct patches an epoch touches. Rows are taken by stride inside the loader, so a
+    capped view still spans the whole corpus rather than one tile's annotations.
+    """
+    from satquery.data.datasets.bigearthnet_txt import (
+        BIGEARTHNET_TXT_TASKS,
+        BigEarthNetTxtDataset,
+    )
+
+    tasks = tuple(component.options.get("tasks") or BIGEARTHNET_TXT_TASKS)
+    max_rows = component.options.get("max_rows")
+    max_patches = component.options.get("max_patches")
+    view = BigEarthNetTxtDataset(
+        split="train",
+        tasks=tasks,
+        max_rows=int(max_rows) if max_rows else None,
+        max_patches=int(max_patches) if max_patches else None,
+    )
+    len(view)  # forces the index load, so a missing corpus fails here
     return [view]
 
 

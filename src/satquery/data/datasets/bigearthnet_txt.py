@@ -158,6 +158,7 @@ class BigEarthNetTxtDataset(SampleDataset):
         lmdb_path: Path | None = None,
         cache_dir: Path | None = None,
         max_rows: int | None = None,
+        max_patches: int | None = None,
         transform: SampleTransform | None = None,
     ) -> None:
         """Configure the view without touching disk.
@@ -168,9 +169,16 @@ class BigEarthNetTxtDataset(SampleDataset):
             tasks: Annotation families to keep, a subset of `BIGEARTHNET_TXT_TASKS`.
             lmdb_path: Converted reBEN LMDB. Defaults to `<root>/../bigearthnet_lmdb`.
             cache_dir: Where patch rasters are materialised.
-            max_rows: Cap the index. The full train split is 4.7M rows; a cap makes a
-                smoke run tractable. Rows are taken by stride so the subset spans the
-                whole corpus rather than one tile's worth of annotations.
+            max_rows: Cap the number of annotation rows, taken by stride.
+            max_patches: Cap the number of distinct PATCHES instead, keeping every
+                annotation on the patches it selects.
+
+                Prefer this for training. The corpus is ordered by patch and carries
+                roughly seventeen annotations per patch, so a stride over rows lands on a
+                different patch almost every time -- capping at 40,000 rows selected
+                40,000 distinct patches. Each first touch of a patch costs a seek on the
+                LMDB's spinning drive, so that shape is the worst case: maximum I/O for
+                minimum data. Capping patches buys about seventeen rows per seek.
             transform: Optional `Sample`-to-`Sample` rewrite applied last.
 
         Raises:
@@ -194,6 +202,7 @@ class BigEarthNetTxtDataset(SampleDataset):
         self.split = split
         self.tasks = tuple(tasks)
         self.max_rows = max_rows
+        self.max_patches = max_patches
         self.transform = transform
         self.lmdb_path = (
             Path(lmdb_path) if lmdb_path is not None else self.root.parent / "bigearthnet_lmdb"
@@ -239,6 +248,13 @@ class BigEarthNetTxtDataset(SampleDataset):
             path, columns=["patch_id", "s1_name", "input", "output", "type", "category", "split"]
         )
         frame = frame[(frame["split"] == self.split) & (frame["type"].isin(self.tasks))]
+
+        if self.max_patches is not None:
+            patches = frame["patch_id"].drop_duplicates()
+            if self.max_patches < len(patches):
+                stride = max(len(patches) // self.max_patches, 1)
+                keep = set(patches.iloc[::stride].head(self.max_patches))
+                frame = frame[frame["patch_id"].isin(keep)]
 
         if self.max_rows is not None and self.max_rows < len(frame):
             # A stride, never a head slice: the table is ordered by patch, so the first N
