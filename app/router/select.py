@@ -12,20 +12,39 @@ from __future__ import annotations
 
 from satquery.serve.contracts import TaskType, ToolSpec
 
+#: Terms that decide a task outright when present, worth more than an ordinary match.
+#:
+#: Needed because two tools now serve a bi-temporal pair and the obvious keywords overlap.
+#: "Describe the change" contains "change", which is a CHANGE_VQA signal, and "describe",
+#: which is a CHANGE_DESCRIPTION one; a flat count ties and the tie-break is registry order,
+#: which is arbitrary. An explicit request for prose has to outrank an incidental noun.
+_STRONG: dict[TaskType, tuple[str, ...]] = {
+    TaskType.CHANGE_DESCRIPTION: ("describe", "explain", "summarise", "summarize", "in detail", "tell me about", "what happened"),
+    TaskType.CHANGE_VQA: ("did ", "how much", "what percentage", "increase", "decrease", "is there", "are there"),
+}
+
 #: Query terms that signal each task. Ordered by how strongly they discriminate.
 _SIGNALS: dict[TaskType, tuple[str, ...]] = {
     TaskType.GROUNDING: ("where", "locate", "find", "show me", "point", "box", "which part"),
     TaskType.CAPTION: ("describe", "caption", "what is in", "what do you see", "summarise", "summarize"),
     TaskType.CHANGE_VQA: ("change", "changed", "difference", "before", "after", "increase", "decrease"),
+    TaskType.CHANGE_DESCRIPTION: ("change", "changed", "difference", "before", "after"),
     TaskType.FUSION_EXTRACTION: ("extract", "built-up", "built up", "water", "urban", "flood", "sar"),
     TaskType.VQA: ("how many", "what colour", "what color", "is there", "are there", "count", "?"),
 }
 
 
 def score(spec: ToolSpec, query: str) -> int:
-    """How well one candidate matches the query. Higher wins; zero means no signal."""
+    """How well one candidate matches the query. Higher wins; zero means no signal.
+
+    A strong term counts for three so that an explicit "describe the change" beats a
+    candidate that merely shares the noun. Three rather than two because a query can
+    legitimately carry two ordinary signals for the wrong task.
+    """
     text = query.lower()
-    return sum(1 for term in _SIGNALS.get(spec.task, ()) if term in text)
+    ordinary = sum(1 for term in _SIGNALS.get(spec.task, ()) if term in text)
+    strong = sum(3 for term in _STRONG.get(spec.task, ()) if term in text)
+    return ordinary + strong
 
 
 def select(candidates: list[ToolSpec], query: str) -> tuple[ToolSpec, str]:

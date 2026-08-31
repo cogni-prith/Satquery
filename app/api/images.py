@@ -8,6 +8,7 @@ the file they chose, instead of surfacing three clicks later attached to an answ
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import Response
 
 from app.core.schemas import UploadedImage
 from app.state import STATE
@@ -43,4 +44,41 @@ async def upload(file: UploadFile) -> UploadedImage:
         band_names=ref.band_names,
         crs=ref.crs,
         warnings=ref.warnings,
+    )
+
+
+@router.get("/{image_id}/preview")
+async def preview(image_id: str) -> Response:
+    """Return the image as a PNG, rendered exactly as the model sees it.
+
+    Deliberately routed through `load_model_input` -- the same function the tools call --
+    rather than a separate thumbnailer. A SAR raster therefore previews as the frozen
+    pseudo-RGB (refined Lee, dB, percentile stretch, VV/VH/ratio), and a multispectral
+    stack previews as its stretched RGB bands. A prettier preview produced some other way
+    would be showing the user something the model never saw, which is exactly the kind of
+    quiet divergence between display and reality this project avoids elsewhere.
+    """
+    import io
+
+    from PIL import Image
+
+    from satquery.io.raster import read_image_ref
+    from satquery.models.base import load_model_input
+
+    try:
+        path = STATE.blobs.path_for(image_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    try:
+        rgb, _ = load_model_input(read_image_ref(path))
+    except Exception as exc:  # noqa: BLE001 - a preview failure must not be a 500
+        raise HTTPException(status_code=422, detail=f"cannot render a preview: {exc}") from exc
+
+    buffer = io.BytesIO()
+    Image.fromarray(rgb).save(buffer, format="PNG")
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
     )

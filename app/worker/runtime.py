@@ -75,7 +75,12 @@ class GpuRuntime:
         try:
             from satquery.models.registry import REGISTRY
             from satquery.models.vlm.backbone import BackboneConfig, EarthDialBackbone
-            from satquery.models.vlm.tasks import CaptionTool, GroundingTool, VqaTool
+            from satquery.models.vlm.tasks import (
+                CaptionTool,
+                ChangeDescriptionTool,
+                GroundingTool,
+                VqaTool,
+            )
 
             from satquery.utils.paths import configs_dir
 
@@ -93,6 +98,9 @@ class GpuRuntime:
             REGISTRY.bind("vlm.vqa", lambda: VqaTool(backbone=backbone))
             REGISTRY.bind("vlm.caption", lambda: CaptionTool(backbone=backbone))
             REGISTRY.bind("vlm.grounding", lambda: GroundingTool(backbone=backbone))
+            REGISTRY.bind(
+                "vlm.change_description", lambda: ChangeDescriptionTool(backbone=backbone)
+            )
 
             self._loaded = True
             _LOG.info("models resident, %.0f MB VRAM", self.vram_used_mb() or 0.0)
@@ -115,7 +123,21 @@ class GpuRuntime:
 
         with self._lock:
             tool = REGISTRY.get(tool_name)
-            return tool.run(request)
+            try:
+                return tool.run(request)
+            finally:
+                # Release cached blocks between requests. Torch keeps freed allocations in
+                # its caching allocator, which is normally the right trade -- but on an
+                # 8 GB card with ~4.6 GB permanently resident, a few requests of differing
+                # tile counts fragment the remaining ~3 GB until one OOMs. Observed exactly
+                # that: 1366x768 and 1920x1080 both fine, 853x611 OOM after them.
+                try:
+                    import torch
+
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:  # noqa: BLE001 - never let cleanup mask a real result
+                    pass
 
 
 def build_image_refs(paths: list[Path]) -> list[ImageRef]:
