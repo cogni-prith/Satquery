@@ -208,18 +208,17 @@ class InternVLCollator:
 
     def encode(self, sample: Sample) -> dict[str, Any]:
         """Encode a single sample. Separated from `__call__` so it is unit-testable."""
-        import numpy as np
         import torch
-        from PIL import Image
 
+        from satquery.models.base import load_model_input
         from satquery.models.vlm.backbone import dynamic_tiles
 
-        with Image.open(sample.images[0].path) as handle:
-            pixels = dynamic_tiles(
-                np.asarray(handle.convert("RGB")),
-                tile_size=self.image_size,
-                max_tiles=self.max_tiles,
-            )
+        # `load_model_input`, not PIL. PIL cannot open a 4-band uint16 GeoTIFF at all --
+        # which is what the reBEN cache holds -- and for SAR it would show raw backscatter
+        # rather than the frozen pseudo-RGB. Going through the same function inference
+        # uses is also what guarantees the model sees identical pixels in both paths.
+        rendered, _ = load_model_input(sample.images[0])
+        pixels = dynamic_tiles(rendered, tile_size=self.image_size, max_tiles=self.max_tiles)
         n_tiles = pixels.shape[0]
 
         image_tokens = (
@@ -339,12 +338,14 @@ class ChangeHeadCollator:
 
         mean = np.asarray(IMAGENET_MEAN, dtype=np.float32).reshape(3, 1, 1)
         std = np.asarray(IMAGENET_STD, dtype=np.float32).reshape(3, 1, 1)
+        from satquery.models.base import load_model_input
+
         dates = []
         for ref in sample.images:
-            with Image.open(ref.path) as handle:
-                resized = handle.convert("RGB").resize(
-                    (self.image_size, self.image_size), Image.BILINEAR
-                )
+            rendered, _ = load_model_input(ref)
+            resized = Image.fromarray(rendered).resize(
+                (self.image_size, self.image_size), Image.BILINEAR
+            )
             array = np.asarray(resized, dtype=np.float32).transpose(2, 0, 1) / 255.0
             dates.append(torch.from_numpy((array - mean) / std))
 

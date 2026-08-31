@@ -130,14 +130,23 @@ class CDVQADataset(SampleDataset):
         with paths["images"].open(encoding="utf-8") as handle:
             images = {i["id"]: i["file_name"] for i in json.load(handle)["images"]}
 
+        # SECOND imagery is a separate manual download from the annotations, so a split
+        # can legitimately have every question and no pictures. Skipping the rows whose
+        # imagery is absent lets a partial corpus train on what it has instead of dying
+        # thousands of steps in; the count is logged so a silently tiny split is visible.
+        first, _second = self._image_dirs()
         records: list[dict[str, Any]] = []
         unknown: set[str] = set()
+        absent = 0
         for question in questions:
             if not question.get("active", True):
                 continue
             answer = answers.get(question["id"])
             file_name = images.get(question["img_id"])
             if answer is None or file_name is None:
+                continue
+            if not (first / file_name).is_file():
+                absent += 1
                 continue
             if answer not in CDVQA_ANSWERS:
                 # Never silently drop: an answer outside the closed set means the frozen
@@ -150,6 +159,16 @@ class CDVQADataset(SampleDataset):
                     "type": question.get("type", ""),
                     "file_name": file_name,
                 }
+            )
+
+        if absent:
+            logger.warning(
+                "CDVQA %s: %d of %d questions reference imagery that is not on disk and "
+                "were skipped. The SECOND imagery is a separate download; see "
+                "scripts/download_datasets.py.",
+                self.split,
+                absent,
+                absent + len(records),
             )
 
         if unknown:

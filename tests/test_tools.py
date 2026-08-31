@@ -200,7 +200,10 @@ def test_vlm_tools_error_rather_than_fabricate_without_a_backbone(
 
 def test_a_tool_never_raises_out_of_run(optical) -> None:
     # BaseTool.run catches everything, so a failing tool cannot take the service down.
-    result = REGISTRY.get("change.vqa_head").run(ToolRequest(query="q", images=[optical, optical]))
+    # change.mask is a stub, so its failure is designed rather than incidental -- these
+    # previously leaned on change.vqa_head failing because PIL could not read the fixture,
+    # which stopped being true once the collators moved to the raster loader.
+    result = REGISTRY.get("change.mask").run(ToolRequest(query="q", images=[optical, optical]))
     assert result.error is not None
 
 
@@ -217,7 +220,7 @@ def test_a_failed_call_still_produces_a_well_formed_trace(optical) -> None:
     request = ToolRequest(query="q", images=[optical, optical])
     config, _ = validate_inputs(request.images)
     trace = Trace(request_id=request.request_id, input_config=config)
-    trace.record(REGISTRY.get("change.vqa_head").run(request))
+    trace.record(REGISTRY.get("change.mask").run(request))
 
     assert trace.steps[0].status is StepStatus.ERROR
     assert trace.steps[0].message

@@ -403,6 +403,15 @@ def build_datasets(cfg: LoraTrainConfig) -> tuple[Any, Any | None]:
             # continues on what IS available rather than refusing to start.
             _LOG.warning("mix component %r skipped: %s", component.name, exc)
             continue
+        if sum(len(part) for part in parts) == 0:
+            # An empty component would still draw its share of the weight and then fall
+            # back to another corpus, so the run would report a mix it is not training.
+            _LOG.warning(
+                "mix component %r has no usable samples on disk; dropped from the mix",
+                component.name,
+            )
+            continue
+
         # Views WITHIN one component are pooled; components are mixed BETWEEN by weight.
         # Pooling here rather than globally is what lets the declared weights mean what
         # they say -- see the note below on why concatenation alone would not.
@@ -437,9 +446,16 @@ def build_datasets(cfg: LoraTrainConfig) -> tuple[Any, Any | None]:
     # about 99% BigEarthNet while every log line still reported the declared weights.
     from satquery.data.mixer import MixedDataset, MixSpec
 
+    # Renormalise over the survivors: MixSpec requires weights to sum to 1.0, and a
+    # dropped component leaves a gap. Rescaling keeps the RATIO between what remains --
+    # 40/40 of an intended 40/40/20 becomes 50/50, which is the honest reading of "the
+    # same relative mix, minus what is not on disk". The MIX INCOMPLETE warning above
+    # is what stops that being mistaken for the specified distribution.
+    survivors = [c for c in spec.components if c.name in pooled]
+    total = sum(c.weight for c in survivors)
     honoured_spec = MixSpec(
         name=spec.name,
-        components=[c for c in spec.components if c.name in pooled],
+        components=[replace(c, weight=c.weight / total) for c in survivors],
         scale_policy=spec.scale_policy,
         seed=spec.seed,
     )
@@ -595,10 +611,12 @@ def _resolve_resume(cfg: LoraTrainConfig, output_dir: Path) -> Path | None:
             reverse=True,
         )
         if not candidates:
-            raise FileNotFoundError(
-                f"resume_from_checkpoint='auto' but no checkpoint-* exists under "
-                f"{output_dir}. Set it to null for a fresh run."
-            )
+            # 'auto' means "continue if there is something to continue from". Raising
+            # here made the first run of any new output_dir fail, which is the one case
+            # where starting fresh is obviously correct. An explicit path still raises
+            # when it is missing -- that IS a mistake worth stopping for.
+            _LOG.info("resume_from_checkpoint='auto': no checkpoint under %s, starting fresh", output_dir)
+            return None
         return candidates[0]
 
     path = Path(requested)
