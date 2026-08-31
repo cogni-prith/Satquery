@@ -1,0 +1,7 @@
+# Open-vocabulary detection for grounding. Boxes feed the symbolic layer, which is where
+# "largest" and "northernmost" are decided -- not by the detector.
+backbone: IDEA-Research/grounding-dino-base
+box_threshold: 0.25
+text_threshold: 0.20
+max_boxes: 50
+image_size: 512

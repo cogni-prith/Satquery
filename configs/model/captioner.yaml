@@ -1,0 +1,8 @@
+# LoRA captioner. Last and optional: it exists because CIDEr punishes template phrasing,
+# not because the system needs a VLM. It never answers a quantitative question.
+base_model: akshaydudhane/EarthDial_4B_RGB
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_task_type: null    # not CAUSAL_LM: PeftModelForCausalLM injects inputs_embeds
+max_new_tokens: 128

@@ -1,0 +1,9 @@
+# Land cover segmentation. Every quantitative answer is a pixel count over this output,
+# so its per-class IoU is the ceiling on the whole system.
+encoder: nvidia/mit-b0
+in_channels: 4          # OPTICAL_BAND_ORDER_4: B02, B03, B04, B08
+num_classes: 6          # CLC Level-1 plus background; ids are the output-layer ordering
+ignore_index: 255
+# Built-up and water are rare and heavily zero-inflated in reBEN, so plain cross-entropy's
+# minimiser is an empty mask scoring ~96% pixel accuracy while extracting nothing.
+loss: ce_dice

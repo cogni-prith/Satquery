@@ -45,22 +45,25 @@ def _change_trend(record: AnswerRecord) -> str:
                 f"{readable} {trend} by {_area(abs(delta.absolute_m2))} "
                 f"({_percent(abs(delta.relative))} of its earlier extent)"
             )
-    return "; ".join(parts) if parts else "No class showed a measurable change."
+    return "; ".join(parts) + "." if parts else "No class showed a measurable change."
 
 
 def _proportions(record: AnswerRecord) -> str:
     if not record.class_proportions:
         return "No land cover proportions were measured."
     ordered = sorted(record.class_proportions.items(), key=lambda kv: kv[1], reverse=True)
-    return ", ".join(f"{name.replace('_', ' ')} {_percent(value)}" for name, value in ordered)
+    return ", ".join(f"{name.replace('_', ' ')} {_percent(value)}" for name, value in ordered) + "."
 
 
 def _counts(record: AnswerRecord) -> str:
     if not record.object_counts:
         return "No objects were counted."
-    return ", ".join(
-        f"{count} {name.replace('_', ' ')}{'' if count == 1 else 's'}"
-        for name, count in record.object_counts.items()
+    return (
+        ", ".join(
+            f"{count} {name.replace('_', ' ')}{'' if count == 1 else 's'}"
+            for name, count in record.object_counts.items()
+        )
+        + "."
     )
 
 

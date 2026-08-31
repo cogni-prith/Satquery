@@ -7,7 +7,7 @@ name = "satquery"
 version = "0.1.0"
 description = "Model layer of SatQuery AI: agentic vision-language analysis of remote sensing imagery (SIH 2026, SIH26167)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "Proprietary" }
 
 # Base group: everything the preprocessing, io, contract and registry code needs.

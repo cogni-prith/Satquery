@@ -73,3 +73,68 @@ def test_ambiguity_is_reported_not_resolved() -> None:
         ],
     )
     assert "1 other candidate" in templates.verbalize(record)
+
+
+# -- the rewrite guard ---------------------------------------------------------------------
+
+
+def _record_with_area() -> AnswerRecord:
+    return AnswerRecord(
+        intent="change_trend",
+        facts=[Fact(key="d", value=2_700_000.0, unit="m2", provenance="symbolic.measures")],
+        area_deltas={
+            "built_up": AreaDelta(
+                area_t1_m2=10_000_000.0,
+                area_t2_m2=12_700_000.0,
+                absolute_m2=2_700_000.0,
+                relative=0.27,
+                trend="increased",
+            )
+        },
+    )
+
+
+def test_guard_allows_a_faithful_rewording() -> None:
+    from satquery.verbalize.llm import check_numbers
+
+    record = _record_with_area()
+    draft = templates.verbalize(record)
+    check_numbers(record, draft, "Built-up land grew by 2.70 km², or 27.0% of its former extent.")
+
+
+def test_guard_allows_rounding_but_not_changing() -> None:
+    from satquery.verbalize.llm import NumberGuardError, check_numbers
+
+    record = _record_with_area()
+    draft = templates.verbalize(record)
+
+    check_numbers(record, draft, "Growth of 2.7 km².")  # rounded, fine
+    with pytest.raises(NumberGuardError):
+        check_numbers(record, draft, "Growth of 3.9 km².")  # changed, not fine
+
+
+def test_guard_catches_an_invented_number() -> None:
+    """A rewrite that invents a figure is a hallucination wearing a hedge."""
+    from satquery.verbalize.llm import NumberGuardError, check_numbers
+
+    record = _record_with_area()
+    draft = templates.verbalize(record)
+    with pytest.raises(NumberGuardError, match="no fact"):
+        check_numbers(record, draft, "Built-up land grew across roughly 45 hectares.")
+
+
+def test_guard_lets_small_integers_through() -> None:
+    """'one of the three regions' is English, not a measurement. Rejecting it would make
+    every fluent rewrite fail and the guard would be turned off."""
+    from satquery.verbalize.llm import check_numbers
+
+    record = _record_with_area()
+    check_numbers(record, templates.verbalize(record), "There are 2 findings of note.")
+
+
+def test_rewrite_refuses_rather_than_silently_returning_the_draft() -> None:
+    from satquery.verbalize.llm import rewrite
+
+    record = _record_with_area()
+    with pytest.raises(NotImplementedError, match="check_numbers"):
+        rewrite(record, templates.verbalize(record))

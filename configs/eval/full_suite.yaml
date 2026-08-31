@@ -1,0 +1,61 @@
+# Every benchmark the problem statement is graded on, in one file, run by `make eval`.
+#
+# One command runs all evals so that "we scored X" is a claim someone else can reproduce
+# in one step rather than a number copied out of a notebook. A benchmark that has not run
+# reports TBD; nothing here fills a cell with an estimate.
+seed: 1337
+report:
+  path: ${SATQUERY_ARTIFACT_ROOT}/eval/report.md
+  # A missing score prints TBD. Never a placeholder that reads like a measurement.
+  missing_value: TBD
+  fail_on_zero_tool_calls: true
+
+suites:
+  - name: rsvqa_lr
+    task: vqa
+    config: configs/data/rsvqa.yaml
+    split: test
+    n: 200
+    metrics: [exact_match]
+
+  - name: vrsbench_vqa
+    task: vqa
+    config: configs/data/vrsbench.yaml
+    split: test
+    n: 200
+    metrics: [exact_match]
+
+  - name: vrsbench_grounding
+    task: grounding
+    config: configs/data/vrsbench.yaml
+    split: test
+    n: 120
+    metrics: [acc_at_0.5, acc_at_0.7]
+
+  - name: vrsbench_caption
+    task: caption
+    config: configs/data/vrsbench.yaml
+    split: test
+    n: 60
+    metrics: [bleu4, rouge_l]
+
+  - name: cdvqa_test1
+    task: change_vqa
+    config: configs/data/cdvqa.yaml
+    split: test1
+    n: 500
+    metrics: [exact_match]
+
+  - name: cdvqa_test2
+    task: change_vqa
+    config: configs/data/cdvqa.yaml
+    split: test2
+    n: 500
+    metrics: [exact_match]
+
+  - name: reben_fusion
+    task: segmentation
+    config: configs/data/bigearthnet_fusion.yaml
+    split: validation
+    n: 200
+    metrics: [iou_built_up, iou_water, index_agreement]

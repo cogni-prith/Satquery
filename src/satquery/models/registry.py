@@ -9,6 +9,11 @@ implemented` says which is which, so the backend can build against the real shap
 the API today and get a `NotImplementedError` -- never a fabricated answer -- if it
 calls a tool whose weights are not trained.
 
+In v2 that flag is False for every learned tool. The specs were carried over from v1,
+where the flags were accurate; carrying the flags over with them would have told the
+backend that six tools it cannot call are ready. `indices.deterministic` is the one
+True, because it is closed-form arithmetic with no weights to be missing.
+
 Changing this file is a cross-team event: update `docs/INTERFACE.md` in the same
 commit and say so in the commit message.
 """
@@ -69,7 +74,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Answer a natural-language question about a single remote sensing image.",
         requires_gpu=True,
-        implemented=True,
+        implemented=False,
     ),
     ToolSpec(
         name="vlm.caption",
@@ -83,7 +88,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Describe the land cover and major objects visible in a single image.",
         requires_gpu=True,
-        implemented=True,
+        implemented=False,
     ),
     ToolSpec(
         name="vlm.grounding",
@@ -112,7 +117,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "preferred when the phrase is descriptive rather than a bare object class."
         ),
         requires_gpu=True,
-        implemented=True,
+        implemented=False,
     ),
     ToolSpec(
         name="detector.openvocab",
@@ -164,7 +169,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Free-form description of what changed between two co-registered dates.",
         requires_gpu=True,
-        implemented=True,
+        implemented=False,
     ),
     ToolSpec(
         name="change.vqa_head",
@@ -191,7 +196,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "Scored separately from vlm.change_description; the router calls both."
         ),
         requires_gpu=True,
-        implemented=True,
+        implemented=False,
     ),
     ToolSpec(
         name="change.mask",
@@ -244,7 +249,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "using the learned dual encoder cross-checked against the deterministic indices."
         ),
         requires_gpu=True,
-        implemented=True,
+        implemented=False,
     ),
     ToolSpec(
         name="indices.deterministic",
