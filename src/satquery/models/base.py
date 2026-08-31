@@ -101,7 +101,17 @@ def load_model_input(ref: ImageRef) -> tuple[np.ndarray, list[str]]:
         # allowed. Anything else (a named stack missing a band, or an unnamed stack with
         # a different width) is still a hard error.
         unnamed = all(name.startswith("band_") for name in names)
-        if unnamed and len(names) == 3:
+        # Three unnamed bands are RGB and four are RGBA -- both defined by the image
+        # format itself, not guessed about a sensor, which is why reading them
+        # positionally is sound here and nowhere else. A screenshot saved as PNG very
+        # often carries an alpha channel; refusing it would reject the most ordinary
+        # input a user has.
+        if unnamed and len(names) in (3, 4):
+            if len(names) == 4:
+                warnings.append(
+                    "four unnamed bands read as RGBA; the alpha channel is dropped and "
+                    "the first three are used as RGB"
+                )
             stack = array[:3]
             return (
                 np.ascontiguousarray(stretch_to_uint8(stack).transpose(1, 2, 0)),
@@ -109,8 +119,8 @@ def load_model_input(ref: ImageRef) -> tuple[np.ndarray, list[str]]:
             )
         raise ValueError(
             f"{ref.path} is missing the band(s) {missing} needed to build an RGB view. "
-            f"Available: {names}. Bands are matched by name; only a three-band image "
-            f"with no band descriptions at all is read positionally as RGB."
+            f"Available: {names}. Bands are matched by name; only an image with no band "
+            f"descriptions at all is read positionally, as RGB (3 bands) or RGBA (4)."
         )
 
     stack = np.stack([array[names.index(band)] for band in wanted])

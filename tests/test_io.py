@@ -281,3 +281,21 @@ def test_warnings_are_not_repeated_in_a_result():
     merged = list(dict.fromkeys(["a", "b", "a", "c", "b"]))
     assert merged == ["a", "b", "c"]
     assert hasattr(BaseTool, "run")
+
+
+def test_an_rgba_screenshot_is_read_positionally(tmp_path):
+    """A PNG screenshot usually carries an alpha channel. Four unnamed bands are RGBA by
+    the format's own definition, so reading them positionally is sound -- and refusing
+    them rejected the most ordinary input a user has."""
+    import numpy as np
+    from PIL import Image
+
+    from satquery.io.raster import read_image_ref
+    from satquery.models.base import load_model_input
+
+    path = tmp_path / "screenshot.png"
+    Image.fromarray(np.random.randint(0, 255, (16, 24, 4), dtype=np.uint8), "RGBA").save(path)
+
+    rgb, warnings = load_model_input(read_image_ref(path))
+    assert rgb.shape == (16, 24, 3)
+    assert any("alpha channel is dropped" in w for w in warnings)
