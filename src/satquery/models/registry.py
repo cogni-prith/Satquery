@@ -256,7 +256,14 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         version="0.1.0",
         task=TaskType.FUSION_EXTRACTION,
         accepted_modalities=[Modality.MULTISPECTRAL, Modality.SAR],
-        accepted_input_configs=[InputConfig.SINGLE, InputConfig.CROSS_MODAL_PAIR],
+        # Bi-temporal is included because the same closed-form arithmetic answers
+        # "how much has the water changed" as answers "how much water is there" --
+        # it is two measurements and a subtraction, with no extra machinery.
+        accepted_input_configs=[
+            InputConfig.SINGLE,
+            InputConfig.CROSS_MODAL_PAIR,
+            InputConfig.BI_TEMPORAL_PAIR,
+        ],
         min_gsd_m=None,
         max_gsd_m=None,
         param_schema={

@@ -117,8 +117,8 @@ def verbalize(record: AnswerRecord) -> str:
             else ("medium" if "medium" in bands.values() else "high")
         )
         text += (
-            f" Confidence is {worst}, measured as agreement between the learned "
-            "segmentation and the deterministic spectral index."
+            f" Confidence is {worst}, measured as agreement between two independent "
+            "estimates of the same quantity."
         )
 
     if record.warnings:
