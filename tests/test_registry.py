@@ -122,6 +122,7 @@ def test_implemented_flags_match_reality() -> None:
         "fusion.extraction",
         "indices.deterministic",
         "vlm.caption",
+        "vlm.change_description",
         "vlm.grounding",
         "vlm.vqa",
     ]

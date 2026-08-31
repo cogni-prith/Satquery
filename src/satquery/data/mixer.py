@@ -29,6 +29,7 @@ built component dataset raises `NotImplementedError`.
 from __future__ import annotations
 
 import bisect
+import random
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -335,33 +336,88 @@ class MixedDataset(SampleDataset):
         )
 
     def __len__(self) -> int:
-        """Number of draws in one epoch.
+        """Number of draws that constitute one epoch.
+
+        Derived from the largest component scaled by its weight, not from the sum of
+        lengths. A weighted mix draws WITH replacement, so "an epoch" has no natural
+        length -- but sizing it so the heaviest component is seen roughly once keeps an
+        epoch comparable in cost to training on that component alone, which is the
+        intuition anyone reading a step count will have.
 
         Raises:
-            NotImplementedError: Always, until the component loaders are implemented.
+            RuntimeError: Components have not been built.
         """
-        raise NotImplementedError(
-            f"MixedDataset.__len__ is not implemented for mix {self.spec.name!r}. Missing: "
-            f"loaders for component(s) {self._missing_components()!r} -- every dataset in "
-            "satquery.data.datasets still raises NotImplementedError from __len__, so an epoch "
-            "length cannot be derived."
-        )
+        if self.epoch_length is not None:
+            return self.epoch_length
+        if self.components is None:
+            raise RuntimeError(
+                f"mix {self.spec.name!r}: no component datasets are built, so an epoch length "
+                f"cannot be derived. Missing: {self._missing_components()!r}. Build them and "
+                "pass them to MixedDataset, or set epoch_length explicitly."
+            )
+
+        weighted = [
+            len(self.components[component.name]) / component.weight
+            for component in self.spec.components
+            if component.weight > 0.0 and len(self.components[component.name]) > 0
+        ]
+        if not weighted:
+            raise RuntimeError(f"mix {self.spec.name!r}: every component is empty")
+        return int(min(weighted))
+
+    def _draw(self, index: int) -> tuple[str, int]:
+        """Choose a component and a row within it, deterministically for `index`.
+
+        Deterministic rather than randomly sampled at call time so that two processes
+        reading the same index -- a DataLoader worker and a resumed run -- see the same
+        sample. Seeded from the mix seed and the index alone, never from global RNG state.
+        """
+        rng = random.Random((self.spec.seed, index).__hash__())
+        assert self.components is not None  # guarded by __len__ / __getitem__
+
+        names = [component.name for component in self.spec.components]
+        weights = [component.weight for component in self.spec.components]
+        chosen = rng.choices(names, weights=weights, k=1)[0]
+
+        size = len(self.components[chosen])
+        if size == 0:
+            # Fall back to any non-empty component rather than raising mid-epoch: an empty
+            # split is a data problem the caller should see at build time, and failing here
+            # would take down a training run thousands of steps in.
+            for name in names:
+                if len(self.components[name]) > 0:
+                    chosen, size = name, len(self.components[name])
+                    break
+            else:
+                raise RuntimeError(f"mix {self.spec.name!r}: every component is empty")
+
+        return chosen, rng.randrange(size)
 
     def __getitem__(self, index: int) -> Sample:
         """Draw `index` from the weighted mix and return it as a unified `Sample`.
 
+        The scale-resampling transform declared by `ScalePolicy` is applied here when one
+        is configured. It rewrites `ImageRef.gsd_m`, and because `Sample.prompt()` derives
+        the GSD token from that field, the token follows automatically -- which is the
+        whole point of resampling on the typed record rather than on raw pixels.
+
         Raises:
-            NotImplementedError: Always, until the component loaders and the scale
-                resampler are implemented.
+            RuntimeError: Components have not been built.
         """
-        raise NotImplementedError(
-            f"MixedDataset.__getitem__ is not implemented for mix {self.spec.name!r}. Missing: "
-            f"(1) loaders for component(s) {self._missing_components()!r}, whose __getitem__ "
-            "still raises; (2) the scale-resampling transform over "
-            f"CANONICAL_GSD_SCALES_M={self.spec.scale_policy.scales_m!r}, which must resample the "
-            "raster and rewrite ImageRef.gsd_m so Sample.prompt() emits the resampled GSD token "
-            "(satquery.preprocess is the intended home for the raster resample itself)."
-        )
+        if self.components is None:
+            raise RuntimeError(
+                f"mix {self.spec.name!r}: no component datasets are built. Missing: "
+                f"{self._missing_components()!r}."
+            )
+
+        name, position = self._draw(index)
+        sample = self.components[name][position]
+
+        # `source` is set by each loader and is never branched on downstream; recording the
+        # component here as well keeps mix accounting possible without that rule bending.
+        sample.metadata.setdefault("mix_component", name)
+
+        return self.transform(sample) if self.transform is not None else sample
 
 
 class ConcatSampleDataset(SampleDataset):

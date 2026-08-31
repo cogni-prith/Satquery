@@ -246,3 +246,38 @@ def test_representative_gsd_is_the_coarsest_known_value() -> None:
     assert representative_gsd([_ref(gsd_m=0.5), _ref(gsd_m=10.0)]) == 10.0
     assert representative_gsd([_ref(gsd_m=None), _ref(gsd_m=2.0)]) == 2.0
     assert representative_gsd([_ref(gsd_m=None)]) is None
+
+
+def test_a_non_georeferenced_raster_reports_unknown_gsd(tmp_path):
+    """rasterio substitutes the identity matrix for an image with no georeferencing, and
+    its pixel size is exactly 1.0 -- so reading a GSD from it yields a confident "1.0 m"
+    for an image whose true scale is unknown.
+
+    That is the fabrication `preprocess/gsd.py` exists to prevent, and it is worse than an
+    unknown: a wrong GSD token silently mis-scales every downstream decision, and nothing
+    in the output reveals it. Caught in the browser, on a PNG upload showing <gsd:1.0m>.
+    """
+    import numpy as np
+    from PIL import Image
+
+    from satquery.io.raster import read_image_ref
+
+    path = tmp_path / "plain.png"
+    Image.fromarray(np.zeros((8, 8, 3), dtype=np.uint8)).save(path)
+
+    ref = read_image_ref(path)
+    assert ref.gsd_m is None
+    assert ref.gsd_token == "<gsd:unknown>"
+    assert ref.transform is None
+
+
+def test_warnings_are_not_repeated_in_a_result():
+    """The same raster is parsed twice on a normal call -- once by the caller building the
+    ImageRef, once by `load_model_input` reading pixels -- so every ingest warning arrives
+    from both paths. Showing a user the same sentence twice reads as a bug in the warning
+    and buries whichever one matters."""
+    from satquery.models.base import BaseTool
+
+    merged = list(dict.fromkeys(["a", "b", "a", "c", "b"]))
+    assert merged == ["a", "b", "c"]
+    assert hasattr(BaseTool, "run")

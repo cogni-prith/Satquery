@@ -50,6 +50,8 @@ __all__ = [
     "IMAGENET_STD",
     "INDEX_EPS",
     "INSTRUCTION_CAPTION",
+    "INSTRUCTION_CHANGE_DESCRIPTION",
+    "INSTRUCTION_CHANGE_QUESTION_TEMPLATE",
     "INSTRUCTION_FUSION_EXTRACTION",
     "INSTRUCTION_REFER_TEMPLATE",
     "INSTRUCTION_VQA_TEMPLATE",
@@ -259,6 +261,28 @@ INSTRUCTION_FUSION_EXTRACTION: Final[str] = (
 #: `FUSION_EXTRACTION_CLASSES` in order, offset by one. Single-band rather than
 #: one-hot so the mask opens as a readable categorical raster in QGIS.
 FUSION_MASK_BACKGROUND: Final[int] = 0
+
+#: Free-form bi-temporal change description.
+#:
+#: The two-image framing is explicit -- "Image 1" and "Image 2" -- because an InternVL-based
+#: backbone receives multiple images as a flat sequence of tiles with nothing marking where
+#: one ends and the next begins. Without a positional cue the model has no way to know which
+#: acquisition is earlier, and a change description with before and after transposed is
+#: worse than no answer: it is confidently backwards.
+#:
+#: The `[change]` tag follows the pattern of the other frozen instructions. Unlike them it
+#: is OUR convention rather than a verified upstream EarthDial tag, because the published
+#: prompt format for its bi-temporal checkpoint is not documented. Recorded here so nobody
+#: later assumes it was copied from the model card.
+INSTRUCTION_CHANGE_DESCRIPTION: Final[str] = (
+    "[change] Image 1 is the earlier acquisition and Image 2 is the later one. "
+    "Describe what changed between them."
+)
+
+#: The same, when the caller asked a specific question rather than wanting a summary.
+INSTRUCTION_CHANGE_QUESTION_TEMPLATE: Final[str] = (
+    "[change] Image 1 is the earlier acquisition and Image 2 is the later one. {question}"
+)
 
 INSTRUCTION_REFER_TEMPLATE: Final[str] = (
     "[refer] could you tell me the location for <p>{phrase}</p>?"

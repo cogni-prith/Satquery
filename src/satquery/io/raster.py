@@ -84,6 +84,22 @@ def _timestamp_from_tags(tags: dict[str, Any]) -> datetime | None:
     return None
 
 
+#: rasterio substitutes the identity matrix for a raster carrying no georeferencing -- a
+#: plain PNG or JPEG, or a GeoTIFF written without one. Its pixel size is exactly 1.0, so
+#: reading a GSD from it yields a confident "1.0 m" for an image whose scale is unknown.
+#: That is precisely the fabrication `preprocess/gsd.py` exists to prevent, and it is worse
+#: than an unknown because a wrong GSD token silently mis-scales every downstream decision.
+_IDENTITY_TRANSFORM: tuple[float, ...] = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+
+
+def _is_identity(transform: Any) -> bool:
+    """True when `transform` is the identity, i.e. the raster is not georeferenced."""
+    try:
+        return tuple(float(v) for v in tuple(transform)[:6]) == _IDENTITY_TRANSFORM
+    except (TypeError, ValueError):  # pragma: no cover - malformed transform
+        return False
+
+
 def _build_ref(path: Path, dataset: Any) -> ImageRef:
     """Assemble an `ImageRef` from an open rasterio dataset."""
     warnings: list[str] = []
@@ -95,7 +111,7 @@ def _build_ref(path: Path, dataset: Any) -> ImageRef:
     warnings.extend(modality_warnings)
 
     transform: tuple[float, float, float, float, float, float] | None = None
-    if dataset.transform is not None:
+    if dataset.transform is not None and not _is_identity(dataset.transform):
         transform = tuple(float(v) for v in tuple(dataset.transform)[:6])  # type: ignore[assignment]
 
     crs_string: str | None = None

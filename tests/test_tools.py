@@ -115,7 +115,7 @@ def test_index_tool_errors_rather_than_inventing_an_answer_for_unusable_input(tm
 
 @pytest.mark.parametrize(
     "tool_name",
-    ["vlm.change_description", "change.mask"],
+    ["change.mask"],
 )
 def test_every_unimplemented_tool_errors_instead_of_fabricating(tool_name, optical, sar) -> None:
     spec = REGISTRY.get_spec(tool_name)
@@ -388,3 +388,46 @@ def test_failed_adapter_attach_leaves_no_usable_backbone(tmp_path, monkeypatch):
     # so assert the invariant that matters: a backbone must never report itself loaded
     # while carrying no adapter the config asked for.
     assert backbone.config.adapter_path is not None
+
+
+def test_change_description_refuses_a_single_image(optical) -> None:
+    """A change description from one image would be pure invention -- and the backbone
+    would produce one fluently, which is exactly why this has to be a hard failure."""
+    from satquery.models.vlm.tasks import ChangeDescriptionTool
+
+    tool = ChangeDescriptionTool()
+    result = tool.run(ToolRequest(query="what changed", images=[optical]))
+    assert not result.ok
+    assert "exactly two images" in (result.error or "")
+
+
+def test_change_description_always_carries_the_ordering_cue(optical, sar) -> None:
+    """An InternVL backbone receives multiple images as a flat tile sequence with nothing
+    marking where one ends. Without the frozen framing the model cannot know which
+    acquisition is earlier, and a description with before/after transposed is worse than
+    no answer: it is confidently backwards."""
+    from satquery.models.vlm.tasks import ChangeDescriptionTool
+
+    tool = ChangeDescriptionTool()
+
+    generic = tool._instruction_body(ToolRequest(query="what changed", images=[optical, sar]))
+    specific = tool._instruction_body(
+        ToolRequest(query="did the buildings grow", images=[optical, sar])
+    )
+
+    for instruction in (generic, specific):
+        assert "Image 1 is the earlier acquisition" in instruction
+    assert "did the buildings grow" in specific
+
+
+def test_change_description_marks_its_answer_as_unscored(optical, sar, monkeypatch) -> None:
+    """The prose half must never be mistaken for the measured half. CDVQA is scored against
+    a closed answer set by change.vqa_head; this tool explains, it does not evidence."""
+    from satquery.models.vlm.tasks import ChangeDescriptionTool
+
+    tool = ChangeDescriptionTool()
+    monkeypatch.setattr(tool, "_generate", lambda request, params: ("buildings appeared", []))
+
+    result = tool.run(ToolRequest(query="what changed", images=[optical, sar]))
+    assert result.ok
+    assert any("not scored" in warning for warning in result.warnings)

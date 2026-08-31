@@ -164,7 +164,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Free-form description of what changed between two co-registered dates.",
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="change.vqa_head",

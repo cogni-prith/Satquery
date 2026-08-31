@@ -44,6 +44,8 @@ from satquery.models.vlm.backbone import BackboneConfig, EarthDialBackbone
 from satquery.preprocess.constants import (
     BOX_COORDINATE_SCALE,
     INSTRUCTION_CAPTION,
+    INSTRUCTION_CHANGE_DESCRIPTION,
+    INSTRUCTION_CHANGE_QUESTION_TEMPLATE,
     INSTRUCTION_REFER_TEMPLATE,
     INSTRUCTION_VQA_TEMPLATE,
 )
@@ -53,6 +55,7 @@ from satquery.utils.logging import get_logger
 
 __all__ = [
     "CaptionTool",
+    "ChangeDescriptionTool",
     "GroundingTool",
     "VlmTaskTool",
     "VqaTool",
@@ -382,3 +385,61 @@ class GroundingTool(VlmTaskTool):
                 "returned but carries no evidence"
             )
         return self._result(request, params, answer, warnings, Evidence(boxes=boxes))
+
+
+class ChangeDescriptionTool(VlmTaskTool):
+    """`vlm.change_description` -- the generative half of the change doctrine.
+
+    `CLAUDE.md` is explicit that CDVQA must not be routed through the VLM alone: the answer
+    set is closed over nineteen values, so a discriminative head beats a generative model on
+    the scored metric and answers in milliseconds. But it is equally explicit that the VLM
+    keeps the free-form job and that the router should "route both, report both".
+
+    This is that second half. `change.vqa_head` answers *which* label; this answers *what
+    happened*, in prose a person can read. Neither substitutes for the other -- shipping only
+    the classifier leaves a user staring at a bare token like `30_to_40`, and shipping only
+    the prose loses the metric the benchmark actually scores.
+
+    Unlike the head, this tool has no closed vocabulary to fall back on, so it inherits the
+    backbone's fluency *and* its willingness to narrate confidently about imagery far from
+    anything it was trained on. That is a property of the tool, not a defect to hide: the
+    warning below travels with every answer.
+    """
+
+    tool_name = "vlm.change_description"
+
+    def _instruction_body(self, request: ToolRequest) -> str:
+        """Frozen bi-temporal framing, with the caller's question when there is one.
+
+        A bare query is passed through the template rather than used directly, because the
+        template is what tells the model which image is earlier. Dropping it for a
+        user-supplied question would let "what changed?" reach the backbone with no
+        ordering cue at all.
+        """
+        query = request.query.strip()
+        generic = {"", "what changed", "what changed?", "describe the change", "describe changes"}
+        if query.lower().rstrip("?") in {g.rstrip("?") for g in generic}:
+            return INSTRUCTION_CHANGE_DESCRIPTION
+        return INSTRUCTION_CHANGE_QUESTION_TEMPLATE.format(question=query)
+
+    def _run(self, request: ToolRequest) -> ToolResult:
+        """Describe the change in prose.
+
+        Raises:
+            ValueError: Fewer than two images. A change description from a single image
+                would be pure invention, and the model would produce one fluently.
+        """
+        if len(request.images) != 2:
+            raise ValueError(
+                f"vlm.change_description needs exactly two images, got {len(request.images)}. "
+                "A single image cannot show change, and the backbone would narrate one anyway."
+            )
+
+        params = self.effective_params(request)
+        answer, warnings = self._generate(request, params)
+        warnings.append(
+            "free-form change description is not scored against the closed CDVQA answer "
+            "set; use change.vqa_head for the measured answer and treat this prose as "
+            "explanation rather than evidence"
+        )
+        return self._result(request, params, answer, warnings)

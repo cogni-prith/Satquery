@@ -9,13 +9,14 @@ written into a tmp_path, so a regression is caught with no data on disk.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from PIL import Image
 
 from satquery.data.datasets.vrsbench import VRSBenchDataset
 from satquery.data.schema import AnswerType
-from satquery.serve.contracts import TaskType
+from satquery.serve.contracts import ImageRef, Modality, TaskType
 from satquery.utils.paths import dataset_dir
 
 _HAS_VRSBENCH = (dataset_dir("vrsbench") / "VRSBench_train.json").is_file()
@@ -130,3 +131,152 @@ def test_real_samples_validate_against_the_unified_schema() -> None:
             sample = dataset[index]  # Sample construction validates on every access
             assert sample.images[0].path.is_file()
             assert sample.source == "vrsbench"
+
+
+# -- BigEarthNet.txt ----------------------------------------------------------------------
+
+
+def test_choices_split_on_markers_not_commas() -> None:
+    """An option can itself contain a comma, and the first marker follows the question
+    mark rather than a comma. Splitting on commas found one option where there were four,
+    which the loader then rejected loudly rather than training on a wrong target."""
+    from satquery.data.datasets.bigearthnet_txt import parse_choices
+
+    question = (
+        "Which classes share a boundary? a) Broad-leaved forest and Pastures, "
+        "b) Coastal wetlands and Coniferous forest, c) Coniferous forest and Mixed forest, "
+        "d) Arable land and Pastures"
+    )
+    choices = parse_choices(question)
+    assert len(choices) == 4
+    assert choices[3] == "Arable land and Pastures"
+
+
+def test_choices_survive_a_comma_inside_an_option() -> None:
+    from satquery.data.datasets.bigearthnet_txt import parse_choices
+
+    choices = parse_choices("Pick one: a) Arable land, pastures and forest, b) Water bodies")
+    assert choices == ["Arable land, pastures and forest", "Water bodies"]
+
+
+def test_no_markers_yields_no_choices() -> None:
+    """An empty list is the honest answer; the caller must treat it as unusable rather
+    than inventing options."""
+    from satquery.data.datasets.bigearthnet_txt import parse_choices
+
+    assert parse_choices("Is there water in this image?") == []
+
+
+def test_normalised_boxes_become_absolute_pixels() -> None:
+    """The corpus writes the unit square; `BoundingBox` is defined in raster pixels because
+    that is how grounding is scored. Passing the normalised numbers through unchanged would
+    put every box inside the top-left pixel -- a silent zero on every grounding metric, with
+    data that looks well-formed at every intermediate step."""
+    from satquery.data.datasets.bigearthnet_txt import parse_normalised_box
+
+    box = parse_normalised_box("[0.64 0.0, 1.0 0.71]", 120, 120, "point")
+    assert box is not None
+    assert box.x_min == pytest.approx(76.8)
+    assert box.x_max == pytest.approx(120.0)
+    assert box.y_max == pytest.approx(85.2)
+
+
+def test_a_degenerate_box_is_dropped_rather_than_emitted() -> None:
+    """A zero-area target trains on nothing; better to drop the row."""
+    from satquery.data.datasets.bigearthnet_txt import parse_normalised_box
+
+    assert parse_normalised_box("[0.5 0.5, 0.5 0.5]", 120, 120, "point") is None
+    assert parse_normalised_box("not a box", 120, 120, "point") is None
+
+
+def test_unknown_split_is_rejected() -> None:
+    from satquery.data.datasets.bigearthnet_txt import BigEarthNetTxtDataset
+
+    with pytest.raises(ValueError, match=r"unknown BigEarthNet\.txt split"):
+        BigEarthNetTxtDataset(split="nope")
+
+
+def test_missing_annotations_name_the_download() -> None:
+    from satquery.data.datasets.bigearthnet_txt import BigEarthNetTxtDataset
+
+    dataset = BigEarthNetTxtDataset(root=Path("/nonexistent"), split="test")
+    with pytest.raises(FileNotFoundError, match="huggingface-cli download"):
+        len(dataset)
+
+
+# -- the weighted mix ---------------------------------------------------------------------
+
+
+class _FakeComponent:
+    """A component whose samples say which component they came from."""
+
+    def __init__(self, name: str, size: int) -> None:
+        self.name, self.size = name, size
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __getitem__(self, index: int):
+        from satquery.data.schema import Sample
+
+        return Sample(
+            sample_id=f"{self.name}:{index}",
+            task=TaskType.VQA,
+            answer_type=AnswerType.BINARY,
+            images=[ImageRef(path="/tmp/x.tif", modality=Modality.OPTICAL_RGB, gsd_m=10.0)],
+            instruction="q",
+            answer_text="yes",
+            source=self.name,
+        )
+
+
+def _spec_with(weights: dict[str, float]):
+    from satquery.data.mixer import MixComponent, MixSpec
+
+    return MixSpec(
+        name="test_mix",
+        components=[
+            MixComponent(name=name, weight=weight, config=f"{name}.yaml", splits=("train",))
+            for name, weight in weights.items()
+        ],
+        seed=7,
+    )
+
+
+def test_mix_draws_in_the_declared_proportions() -> None:
+    """The 40/40/20 blend is specified in CLAUDE.md; a mixer that silently drew uniformly
+    would train on the wrong distribution while every log line still looked correct."""
+    import collections
+
+    from satquery.data.mixer import MixedDataset
+
+    spec = _spec_with({"a": 0.5, "b": 0.3, "c": 0.2})
+    mix = MixedDataset(
+        spec, components={n: _FakeComponent(n, 1000) for n in ("a", "b", "c")}
+    )
+
+    drawn = collections.Counter(mix[i].metadata["mix_component"] for i in range(3000))
+    assert drawn["a"] / 3000 == pytest.approx(0.5, abs=0.05)
+    assert drawn["b"] / 3000 == pytest.approx(0.3, abs=0.05)
+    assert drawn["c"] / 3000 == pytest.approx(0.2, abs=0.05)
+
+
+def test_mix_draws_are_deterministic_for_an_index() -> None:
+    """A DataLoader worker and a resumed run must see the same sample for the same index,
+    so the draw is seeded from (mix seed, index) rather than global RNG state."""
+    from satquery.data.mixer import MixedDataset
+
+    spec = _spec_with({"a": 0.5, "b": 0.5})
+    build = lambda: MixedDataset(  # noqa: E731 - a one-line factory reads better here
+        spec, components={n: _FakeComponent(n, 500) for n in ("a", "b")}
+    )
+    first, second = build(), build()
+    assert [first[i].sample_id for i in range(50)] == [second[i].sample_id for i in range(50)]
+
+
+def test_mix_without_components_says_what_is_missing() -> None:
+    from satquery.data.mixer import MixedDataset
+
+    mix = MixedDataset(_spec_with({"a": 1.0}))
+    with pytest.raises(RuntimeError, match="no component datasets are built"):
+        len(mix)

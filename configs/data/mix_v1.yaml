@@ -12,7 +12,10 @@ components:
     config: bigearthnet_txt.yaml     # resolved relative to this file
     splits: [train]
     options:
-      tasks: [caption, vqa_binary, vqa_multiple_choice, referring_expression]
+      # Named exactly as the published corpus spells them in its `type`
+      # column. The earlier names here were invented before the corpus
+      # was in hand, and would have silently matched nothing.
+      tasks: [captioning, binary, mcq, "bounding box"]
 
   - name: vrsbench
     weight: 0.40

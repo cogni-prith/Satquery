@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 
 from satquery.io.raster import read_raster, write_raster
-from satquery.models.base import BaseTool, infer_input_config_from_images
+from satquery.models.base import BaseTool
 from satquery.models.registry import REGISTRY
 from satquery.preprocess.constants import (
     NDBI_BUILTUP_THRESHOLD,
@@ -46,7 +46,6 @@ from satquery.utils.logging import get_logger
 from satquery.utils.paths import artifact_dir
 
 __all__ = [
-    "ChangeDescriptionTool",
     "DeterministicIndexTool",
     "register_builtin_tools",
     "shared_backbone",
@@ -256,27 +255,6 @@ class DeterministicIndexTool(BaseTool):
         return mask, summary, []
 
 
-class ChangeDescriptionTool(BaseTool):
-    """Free-form bi-temporal change description. Stub.
-
-    The generative half of the change doctrine: this describes what changed in prose,
-    while `change.vqa_head` produces the scored closed-set CDVQA answer. The router
-    calls both and reports both.
-    """
-
-    def __init__(self, spec: ToolSpec | None = None) -> None:
-        super().__init__(spec or REGISTRY.get_spec("vlm.change_description"))
-
-    def _run(self, request: ToolRequest) -> ToolResult:
-        raise NotImplementedError(
-            "vlm.change_description is not implemented. Missing: the EarthDial-4B "
-            "non-optical checkpoint and the LoRA adapter fine-tuned on the bi-temporal "
-            "split of the data mix. No adapter exists under the artifact root, so there is "
-            "nothing to run; returning invented prose would silently corrupt the CDVQA "
-            f"comparison for input config {infer_input_config_from_images(request).value}."
-        )
-
-
 def register_builtin_tools() -> None:
     """Bind every available implementation to its registered spec.
 
@@ -285,7 +263,10 @@ def register_builtin_tools() -> None:
     this module never loads a model.
     """
     REGISTRY.bind("indices.deterministic", DeterministicIndexTool)
-    REGISTRY.bind("vlm.change_description", ChangeDescriptionTool)
+    # vlm.change_description is NOT bound here. It needs a loaded EarthDial backbone, and
+    # binding a factory that constructs one would load an 8 GB model the first time anything
+    # merely inspected the registry. The serving process binds it explicitly alongside the
+    # other VLM tools, sharing one backbone instance.
 
     from satquery.models.change.mask import ChangeMaskTool
     from satquery.models.change.siamese import ChangeVqaTool

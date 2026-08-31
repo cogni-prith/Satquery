@@ -144,7 +144,13 @@ class BaseTool(ABC):
             return self._error_result(request, detail, started, warnings)
 
         result.latency_ms = round((perf_counter() - started) * 1000.0, 3)
-        result.warnings = [*warnings, *result.warnings]
+        # De-duplicated, order preserved. The same raster is parsed twice on a normal
+        # call -- once by the caller building the ImageRef, once by `load_model_input`
+        # reading the pixels -- so every ingest warning arrives from both paths. Both
+        # sources are legitimate and neither should be dropped, but showing a user the
+        # same sentence twice reads as a bug in the warning itself and buries whichever
+        # warning is the one that matters.
+        result.warnings = list(dict.fromkeys([*warnings, *result.warnings]))
         return result
 
     def check_request(self, request: ToolRequest) -> list[str]:
