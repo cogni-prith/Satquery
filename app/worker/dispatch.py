@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.jobs import Job, JobStatus, JobStore
-from app.router.gate import gate
+from app.router.gate import explain_refusal, gate
 from app.router.select import select
 from app.worker.runtime import GpuRuntime, build_request
 from satquery.serve.contracts import ImageRef, StepStatus, TaskType, Trace, TraceStep
@@ -83,6 +83,7 @@ class Dispatcher:
         # -- stage one: the deterministic gate
         started = time.perf_counter()
         config, candidates = gate(task.images, task.task)
+        refusal = None if candidates else explain_refusal(task.images, task.task)
         steps.append(TraceStep(
             step=len(steps) + 1,
             tool_name="router.gate",
@@ -94,13 +95,13 @@ class Dispatcher:
             },
             latency_ms=(time.perf_counter() - started) * 1000.0,
             status=StepStatus.OK if candidates else StepStatus.ERROR,
-            message=None if candidates else "no implemented tool serves this input",
+            message=refusal,
         ))
 
         if not candidates:
             self._finish(job, None, Trace(
                 request_id=job.job_id, input_config=config, task=task.task, steps=steps,
-            ), error="no implemented tool can serve this combination of images")
+            ), error=refusal)
             return
 
         # -- stage two: selection

@@ -61,3 +61,38 @@ def gate(images: list[ImageRef], task: TaskType | None = None) -> tuple[InputCon
 
     candidates = REGISTRY.candidates(config, modalities, gsd, task)
     return config, [spec for spec in candidates if spec.implemented]
+
+
+def explain_refusal(images: list[ImageRef], task: TaskType | None = None) -> str:
+    """Say why no tool matched, in terms of the image the user actually uploaded.
+
+    "No implemented tool can serve this" is true and useless. The gate knows exactly which
+    constraint each tool failed, and the most common refusal by far -- an RGB screenshot,
+    which carries no near-infrared band and so supports no spectral index -- has a
+    one-sentence explanation the user can act on.
+    """
+    from satquery.models.registry import REGISTRY
+
+    config = classify_input(images)
+    modalities = {image.modality for image in images}
+
+    if modalities == {Modality.OPTICAL_RGB}:
+        return (
+            "This is a three-band RGB image, which carries no near-infrared band. Every "
+            "index this build can compute -- NDWI, NDBI, NDVI -- needs one, so there is "
+            "nothing here to measure. Upload a multispectral raster (Sentinel-2, Landsat) "
+            "or a SAR scene. The learned models that would read an RGB screenshot are not "
+            "trained yet."
+        )
+
+    implemented = [spec for spec in REGISTRY.list_specs(implemented_only=True)]
+    if not implemented:
+        return "No tool in this build is implemented yet, so nothing can serve any input."
+
+    names = ", ".join(spec.name for spec in implemented)
+    return (
+        f"No implemented tool accepts {config.value} input with modalities "
+        f"{sorted(m.value for m in modalities)}"
+        + (f" for task {task.value}" if task else "")
+        + f". Implemented in this build: {names}."
+    )

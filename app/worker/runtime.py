@@ -74,6 +74,55 @@ class GpuRuntime:
         self._loading = True
         try:
             from satquery.models.registry import REGISTRY
+
+            bound = self._bind_deterministic() + self._bind_vlm()
+            if not bound:
+                raise RuntimeError(
+                    "no tool could be bound; neither the deterministic index tool nor the "
+                    "VLM backbone is importable from the satquery package on PYTHONPATH"
+                )
+
+            self._loaded = True
+            _LOG.info(
+                "ready: bound %s, %.0f MB VRAM",
+                ", ".join(bound),
+                self.vram_used_mb() or 0.0,
+            )
+            unbound = [
+                spec.name
+                for spec in REGISTRY.list_specs(implemented_only=True)
+                if spec.name not in bound
+            ]
+            if unbound:
+                _LOG.warning("specs marked implemented but not bound here: %s", unbound)
+        except Exception as exc:  # noqa: BLE001 - recorded and surfaced through /api/health
+            self._error = f"{type(exc).__name__}: {exc}"
+            _LOG.exception("model load failed")
+        finally:
+            self._loading = False
+
+    def _bind_deterministic(self) -> list[str]:
+        """Bind the closed-form index tool. No weights, no GPU, so this rarely fails.
+
+        Present in v2 only. Kept separate from the VLM binding so that a missing backbone
+        does not take down the one tool that needs nothing to run.
+        """
+        try:
+            import satquery.serve.tools  # noqa: F401  (imported for its side effects)
+        except ImportError as exc:
+            _LOG.info("no deterministic index tool in this satquery package (%s)", exc)
+            return []
+        _LOG.info("bound the deterministic index tool; no weights required")
+        return ["indices.deterministic"]
+
+    def _bind_vlm(self) -> list[str]:
+        """Load EarthDial-4B and bind the four VLM tools. Present in v1 only.
+
+        Failure here is logged and returned as nothing bound rather than raised, so the
+        service still starts and serves whatever else was bound.
+        """
+        try:
+            from satquery.models.registry import REGISTRY
             from satquery.models.vlm.backbone import BackboneConfig, EarthDialBackbone
             from satquery.models.vlm.tasks import (
                 CaptionTool,
@@ -81,9 +130,12 @@ class GpuRuntime:
                 GroundingTool,
                 VqaTool,
             )
-
             from satquery.utils.paths import configs_dir
+        except ImportError as exc:
+            _LOG.info("no VLM backbone in this satquery package (%s)", exc)
+            return []
 
+        try:
             # Resolve through the ML package, not this service's working directory: the
             # config belongs to satquery and moves with it. A relative path here would
             # break the moment the backend is started from anywhere else.
@@ -92,23 +144,17 @@ class GpuRuntime:
             backbone = EarthDialBackbone(config)
             backbone.load()
             self._backbone = backbone
+        except Exception as exc:  # noqa: BLE001 - one missing backbone must not kill boot
+            _LOG.warning("EarthDial did not load, VLM tools stay unbound: %s", exc)
+            return []
 
-            # One backbone instance shared by all three VLM tools. Binding a factory per
-            # tool would load EarthDial three times and exhaust the card immediately.
-            REGISTRY.bind("vlm.vqa", lambda: VqaTool(backbone=backbone))
-            REGISTRY.bind("vlm.caption", lambda: CaptionTool(backbone=backbone))
-            REGISTRY.bind("vlm.grounding", lambda: GroundingTool(backbone=backbone))
-            REGISTRY.bind(
-                "vlm.change_description", lambda: ChangeDescriptionTool(backbone=backbone)
-            )
-
-            self._loaded = True
-            _LOG.info("models resident, %.0f MB VRAM", self.vram_used_mb() or 0.0)
-        except Exception as exc:  # noqa: BLE001 - recorded and surfaced through /api/health
-            self._error = f"{type(exc).__name__}: {exc}"
-            _LOG.exception("model load failed")
-        finally:
-            self._loading = False
+        # One backbone instance shared by all four VLM tools. Binding a factory per tool
+        # would load EarthDial four times and exhaust the card immediately.
+        REGISTRY.bind("vlm.vqa", lambda: VqaTool(backbone=backbone))
+        REGISTRY.bind("vlm.caption", lambda: CaptionTool(backbone=backbone))
+        REGISTRY.bind("vlm.grounding", lambda: GroundingTool(backbone=backbone))
+        REGISTRY.bind("vlm.change_description", lambda: ChangeDescriptionTool(backbone=backbone))
+        return ["vlm.vqa", "vlm.caption", "vlm.grounding", "vlm.change_description"]
 
     # -- inference --------------------------------------------------------------------
 
