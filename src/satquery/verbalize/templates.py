@@ -31,18 +31,40 @@ def _area(value_m2: float) -> str:
 
 
 def _change_trend(record: AnswerRecord) -> str:
+    """Word each class's change, in ground area where that is known and in share of the
+    scene where it is not.
+
+    The two phrasings are deliberately distinguishable. "grew from 4% to 16% of the scene"
+    is a weaker claim than "grew by 12 ha", and a reader must be able to tell which one
+    they were given without checking whether the raster was georeferenced.
+    """
     parts: list[str] = []
     for class_name, delta in record.area_deltas.items():
-        trend = delta.trend
         readable = class_name.replace("_", " ")
-        if trend == "unchanged":
+
+        if not delta.has_area:
+            # No ground scale: report the share of the scene, which needs none.
+            if delta.trend == "unchanged":
+                parts.append(
+                    f"{readable} held at {_percent(delta.fraction_t2 or 0.0)} of the scene"
+                )
+            else:
+                parts.append(
+                    f"{readable} {delta.trend} from {_percent(delta.fraction_t1 or 0.0)} to "
+                    f"{_percent(delta.fraction_t2 or 0.0)} of the scene "
+                    f"({_percent(abs(delta.relative))} of its earlier extent); ground area "
+                    "is unavailable because the imagery carries no scale"
+                )
+            continue
+
+        if delta.trend == "unchanged":
             parts.append(
                 f"{readable} is unchanged (change of {_area(delta.absolute_m2)} is "
                 "below the reporting threshold)"
             )
         else:
             parts.append(
-                f"{readable} {trend} by {_area(abs(delta.absolute_m2))} "
+                f"{readable} {delta.trend} by {_area(abs(delta.absolute_m2))} "
                 f"({_percent(abs(delta.relative))} of its earlier extent)"
             )
     return "; ".join(parts) + "." if parts else "No class showed a measurable change."

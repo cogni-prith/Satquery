@@ -66,20 +66,35 @@ class Fact(BaseModel):
 
 
 class AreaDelta(BaseModel):
-    """Change in one class between two dates, with its verdict.
+    """Change in one class between two dates.
 
-    A model rather than a loose dict because `trend` is the answer. Read from a dict it
-    would be `.get("trend", "unchanged")`, which turns a misspelled key into a confident
-    "no change" -- the measurement said otherwise and nothing would show it.
+    The three `_m2` fields are `None` when the imagery carried no affine transform. That
+    is not a degraded reading, it is the honest one: a pixel count cannot be converted to
+    ground area without a GSD, and inventing a scale would put a fabricated number into an
+    answer a judge can check.
+
+    `relative` and `trend` remain available in that case, because a ratio of pixel counts
+    is dimensionless and does not need a scale. This matters: an earlier version dropped
+    the whole comparison when the GSD was missing and reported "no class showed a
+    measurable change" on a scene where the water had quadrupled.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    area_t1_m2: float
-    area_t2_m2: float
-    absolute_m2: float
+    area_t1_m2: float | None = None
+    area_t2_m2: float | None = None
+    absolute_m2: float | None = None
+    fraction_t1: float | None = Field(
+        default=None, description="Share of the scene at T1, always computable."
+    )
+    fraction_t2: float | None = None
     relative: float
     trend: str = Field(pattern="^(increased|decreased|unchanged)$")
+
+    @property
+    def has_area(self) -> bool:
+        """True when a ground area was computable, i.e. the GSD was known."""
+        return self.absolute_m2 is not None
 
 
 class AnswerRecord(BaseModel):
@@ -171,7 +186,7 @@ def build_record(
             specialist's entire output while the answer still looked complete.
     """
     from satquery.symbolic import measures
-    from satquery.symbolic.thresholds import classify_trend
+    from satquery.symbolic.thresholds import classify_trend, classify_trend_relative
 
     unknown = set(perception_outputs) - _KNOWN_PERCEPTION_KEYS
     if unknown:
@@ -231,13 +246,33 @@ def build_record(
             first = np.asarray(masks_t1[name])
             second = np.asarray(masks_t2[name])
             if not have_gsd:
-                # Without a GSD the trend is still decidable from pixel counts, but the
-                # absolute floor is expressed in square metres and cannot be applied.
-                # Reporting a trend the threshold never sanctioned would be a guess.
+                # No scale, so no ground area -- but the comparison itself survives. A
+                # ratio of pixel counts is dimensionless, so the relative floor still
+                # applies and the trend is still decidable. Only the area floor is lost.
+                share_t1 = measures.class_fraction(first, True)
+                share_t2 = measures.class_fraction(second, True)
+                change = share_t2 - share_t1
+                ratio = (change / share_t1) if share_t1 > 0.0 else 0.0
+                trend = classify_trend_relative(ratio)
+                area_deltas[name] = AreaDelta(
+                    fraction_t1=share_t1,
+                    fraction_t2=share_t2,
+                    relative=ratio,
+                    trend=trend,
+                )
+                facts.append(
+                    Fact(
+                        key=f"{name}_share_change",
+                        value=change,
+                        unit="fraction",
+                        provenance="symbolic.measures.class_fraction",
+                        confidence=agreement_scores.get(name),
+                    )
+                )
                 warnings.append(
-                    f"{name}: no GSD, so the change floor of "
-                    f"{CHANGE_ABSOLUTE_FLOOR_M2:.0f} m2 cannot be applied and no trend "
-                    "is reported"
+                    f"{name}: no GSD, so the change is reported as a share of the scene "
+                    f"and the {CHANGE_ABSOLUTE_FLOOR_M2:.0f} m2 floor could not be "
+                    "applied -- a large fractional change over few pixels is not filtered"
                 )
                 continue
             delta = measures.area_delta(first, second, True, float(gsd_m))
@@ -246,6 +281,8 @@ def build_record(
                 area_t1_m2=delta["area_t1_m2"],
                 area_t2_m2=delta["area_t2_m2"],
                 absolute_m2=delta["absolute_m2"],
+                fraction_t1=measures.class_fraction(first, True),
+                fraction_t2=measures.class_fraction(second, True),
                 relative=delta["relative"],
                 trend=trend,
             )

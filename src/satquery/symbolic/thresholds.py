@@ -16,6 +16,23 @@ from satquery.preprocess.constants import (
 __all__ = ["classify_trend", "confidence_band"]
 
 
+def classify_trend_relative(delta_rel: float) -> str:
+    """Trend from the relative change alone, for imagery with no known GSD.
+
+    Only the relative floor applies: the absolute floor is expressed in square metres and
+    there is no scale to compare against. That makes this the weaker test -- a large
+    fractional change over a handful of pixels passes it, where the two-floor rule would
+    have called it noise -- so the caller must warn that the area floor was not applied.
+
+    It is still far better than the alternative. Dropping the comparison entirely, which
+    an earlier version did, reported "no measurable change" on a scene whose water had
+    quadrupled: an unconvertible unit was turned into a false statement about the world.
+    """
+    if abs(delta_rel) < CHANGE_RELATIVE_FLOOR:
+        return "unchanged"
+    return "increased" if delta_rel > 0 else "decreased"
+
+
 def classify_trend(delta_abs: float, delta_rel: float) -> str:
     """Return 'increased', 'decreased' or 'unchanged'.
 

@@ -166,3 +166,46 @@ def test_resolve_reference_ranks_rather_than_guessing() -> None:
 
 def test_resolve_reference_on_nothing_returns_nothing() -> None:
     assert predicates.resolve_reference([], "the largest", 20, 20) == []
+
+
+# -- change without a ground scale ----------------------------------------------------------
+
+
+def test_change_is_still_measured_when_the_gsd_is_unknown() -> None:
+    """A missing GSD makes the ground AREA unknowable, not the change.
+
+    An earlier version dropped the whole comparison and the verbalizer then said "No class
+    showed a measurable change" on a scene whose water had quadrupled -- turning an
+    unconvertible unit into a false statement about the world.
+    """
+    from satquery.symbolic.record import build_record
+    from satquery.verbalize.templates import verbalize
+
+    t1 = np.zeros((100, 100), dtype=bool)
+    t1[:20, :20] = True  # 400 px, 4% of the scene
+    t2 = np.zeros((100, 100), dtype=bool)
+    t2[:40, :40] = True  # 1600 px, 16%
+
+    record = build_record("change_trend", {"masks_t1": {"water": t1}, "masks_t2": {"water": t2}}, None)
+    delta = record.area_deltas["water"]
+
+    assert delta.trend == "increased"
+    assert delta.has_area is False, "no GSD means no ground area"
+    assert delta.absolute_m2 is None
+    assert delta.fraction_t1 == pytest.approx(0.04)
+    assert delta.fraction_t2 == pytest.approx(0.16)
+    assert delta.relative == pytest.approx(3.0)
+
+    text = verbalize(record)
+    assert "increased" in text
+    assert "No class showed a measurable change" not in text
+    # The weaker claim must be distinguishable from the ground-area one.
+    assert "of the scene" in text and "no scale" in text
+
+
+def test_relative_floor_still_filters_noise_without_a_gsd() -> None:
+    from satquery.symbolic.thresholds import classify_trend_relative
+
+    assert classify_trend_relative(0.5) == "increased"
+    assert classify_trend_relative(-0.5) == "decreased"
+    assert classify_trend_relative(0.01) == "unchanged"
