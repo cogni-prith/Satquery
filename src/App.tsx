@@ -232,6 +232,7 @@ export default function App() {
                       boxesFor={(index) =>
                         (result?.evidence.boxes ?? []).filter((box) => box.image_index === index)
                       }
+                      highlight={result?.evidence.highlight_path?.split('/').pop() ?? null}
                       onRemove={(id) => setImages((current) => current.filter((item) => item.image_id !== id))}
                       onSwap={() => setImages((current) => [current[1], current[0]])}
                     />

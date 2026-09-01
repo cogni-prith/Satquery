@@ -87,6 +87,7 @@ export type ToolResult = {
     boxes: BoundingBox[]
     mask_path: string | null
     overlay_path: string | null
+    highlight_path: string | null
     index_maps: Record<string, string>
   }
   answer_record: AnswerRecord | null

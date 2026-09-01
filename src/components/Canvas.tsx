@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BoundingBox, UploadedImage } from '../lib/api'
-import { IconSwap, IconX } from './Icons'
+import { IconSwap, IconTarget, IconX } from './Icons'
 
 /**
  * The imagery stage. The subject of the work, so it gets the room.
@@ -15,16 +15,20 @@ export function Canvas({
   images,
   roles,
   boxesFor,
+  highlight,
   onRemove,
   onSwap,
 }: {
   images: UploadedImage[]
   roles: [string, string] | null
   boxesFor: (index: number) => BoundingBox[]
+  /** Filename of the transparent layer marking the pixels the answer is about. */
+  highlight: string | null
   onRemove: (id: string) => void
   onSwap: () => void
 }) {
   const [split, setSplit] = useState(50)
+  const [showHighlight, setShowHighlight] = useState(true)
   const [dragging, setDragging] = useState(false)
   const frame = useRef<HTMLDivElement>(null)
 
@@ -114,7 +118,30 @@ export function Canvas({
           </>
         )}
 
+        {/* The highlight sits above both dates and outside the curtain clip, so the marked
+            pixels stay in place while the wipe moves underneath them -- which is what makes
+            it read as "this area changed" rather than as part of either image. */}
+        {highlight && showHighlight && (
+          <img className="layer highlight" src={`/api/images/evidence/${highlight}`} alt="" />
+        )}
+
+        {highlight && (
+          <div className="frame-legend">
+            <span className="swatch" />
+            {pair ? 'changed area' : 'measured area'}
+          </div>
+        )}
+
         <div className="frame-tools">
+          {highlight && (
+            <button
+              className={`ghost-btn ${showHighlight ? 'on' : ''}`}
+              onClick={() => setShowHighlight((v) => !v)}
+              title="Toggle the highlight over the imagery"
+            >
+              <IconTarget /> {showHighlight ? 'hide' : 'show'} highlight
+            </button>
+          )}
           {pair && (
             <button className="ghost-btn" onClick={onSwap} title="Swap which image is the earlier date">
               <IconSwap /> swap dates

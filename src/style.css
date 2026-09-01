@@ -952,3 +952,38 @@ kbd { font-family: var(--mono); font-size: 9.5px; padding: 1px 4px; border-radiu
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── highlight layer ────────────────────────────────────────────────────────── */
+/* Sits above both dates and outside the curtain clip, so the marked pixels hold still
+   while the wipe moves under them. Slightly translucent so the terrain stays readable
+   through it -- an opaque fill would hide the thing the highlight is pointing at. */
+.frame .layer.highlight {
+  z-index: 2;
+  pointer-events: none;
+  /* Normal blending, not `screen`. Screen lightens toward white, so over bright terrain
+     the red washed out to a muddy pink and stopped reading as a marker at all. Plain
+     alpha keeps the hue constant wherever it lands, which is the whole job. */
+  opacity: 0.66;
+  animation:
+    highlight-in 0.5s var(--ease) both,
+    highlight-pulse 3.4s var(--ease-in-out) 0.5s infinite;
+}
+@keyframes highlight-in { from { opacity: 0; } to { opacity: 0.66; } }
+/* A slow pulse draws the eye without moving anything, and by dipping rather than
+   brightening it periodically reveals the terrain underneath the mark. */
+@keyframes highlight-pulse { 0%, 100% { opacity: 0.66; } 50% { opacity: 0.34; } }
+
+.frame-legend {
+  position: absolute; top: 12px; left: 12px; z-index: 4;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 11px; border-radius: 99px;
+  font-size: 10px; font-weight: 640; letter-spacing: 0.07em; text-transform: uppercase;
+  background: rgba(5,7,13,0.82); backdrop-filter: blur(10px);
+  border: 1px solid var(--line-bright); color: var(--ink-2);
+  pointer-events: none;
+}
+.frame-legend .swatch {
+  width: 9px; height: 9px; border-radius: 3px; flex: none;
+  background: #ff3e4e; box-shadow: 0 0 9px rgba(255,62,78,0.85);
+}
+.ghost-btn.on { border-color: var(--accent); color: var(--ink); background: rgba(91,140,255,0.18); }
