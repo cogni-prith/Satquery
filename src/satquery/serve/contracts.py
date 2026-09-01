@@ -465,6 +465,14 @@ class ToolSpec(BaseModel):
         default="", description="One line for the router's stage-two constrained classifier."
     )
     requires_gpu: bool = Field(default=True)
+    vocabulary: list[str] = Field(
+        default_factory=list,
+        description=(
+            "The closed set of things this tool can find, empty when it is open-ended. "
+            "Declared so the router can prefer an open-ended sibling for a term outside "
+            "it, instead of sending the query to a tool that structurally cannot answer."
+        ),
+    )
     preference: int = Field(
         default=0,
         description=(

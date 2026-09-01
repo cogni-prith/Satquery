@@ -136,7 +136,7 @@ class ObjectDetectorTool(BaseTool):
             request_id=request.request_id,
             tool_name=self.spec.name,
             tool_version=self.spec.version,
-            answer=verbalize(record) if counts else "No objects from this vocabulary were found.",
+            answer=verbalize(record) if counts else self._empty_answer(request.query, wanted),
             evidence=Evidence(boxes=boxes),
             # A detection score is the model's own certainty, not agreement between two
             # independent estimates. Reporting it as confidence would be the softmax
@@ -149,6 +149,29 @@ class ObjectDetectorTool(BaseTool):
             },
             warnings=record.warnings,
             answer_record=record.model_dump(mode="json"),
+        )
+
+    def _empty_answer(self, query: str, wanted: set[str]) -> str:
+        """Say WHY nothing was found, which is usually the useful part.
+
+        "No objects were found" is true and, on a scene that plainly contains the thing
+        asked about, reads as a claim about the world rather than about this model. Asked
+        "where is the highway?" on an image with a motorway across it, the honest answer is
+        that `highway` is not a word this detector knows -- not that there is no highway.
+        """
+        if not wanted:
+            return (
+                f"Nothing in this detector's vocabulary matches your question. It was "
+                f"trained on {len(self.vocabulary)} fixed classes and cannot look for "
+                f"anything else: {', '.join(self.vocabulary)}. "
+                "This is a limit of the detector, not a statement about the image -- try "
+                "asking for one of those classes, or phrase it as a description question "
+                "so the vision-language model handles it instead."
+            )
+        return (
+            f"No {', '.join(sorted(wanted))} was detected above a score of "
+            f"{SCORE_THRESHOLD:.2f}. That is a negative result at this threshold on a "
+            "detector with measured recall of 0.64, not proof that none is present."
         )
 
     def _requested_labels(self, query: str) -> set[str]:
