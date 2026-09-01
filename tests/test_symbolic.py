@@ -186,7 +186,9 @@ def test_change_is_still_measured_when_the_gsd_is_unknown() -> None:
     t2 = np.zeros((100, 100), dtype=bool)
     t2[:40, :40] = True  # 1600 px, 16%
 
-    record = build_record("change_trend", {"masks_t1": {"water": t1}, "masks_t2": {"water": t2}}, None)
+    record = build_record(
+        "change_trend", {"masks_t1": {"water": t1}, "masks_t2": {"water": t2}}, None
+    )
     delta = record.area_deltas["water"]
 
     assert delta.trend == "increased"

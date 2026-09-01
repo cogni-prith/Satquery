@@ -140,12 +140,23 @@ def _write_no_blue(path, lake: int):
     green[:lake, :lake] = 0.30
     nir[:lake, :lake] = 0.05
     with rasterio.open(
-        path, "w", driver="GTiff", height=SIDE, width=SIDE, count=4, dtype="float32",
-        crs="EPSG:32643", transform=from_origin(500000.0, 2000000.0, GSD, GSD),
+        path,
+        "w",
+        driver="GTiff",
+        height=SIDE,
+        width=SIDE,
+        count=4,
+        dtype="float32",
+        crs="EPSG:32643",
+        transform=from_origin(500000.0, 2000000.0, GSD, GSD),
     ) as dst:
         for index, (band, name) in enumerate(
-            [(np.full((SIDE, SIDE), 0.15, np.float32), "B04"), (green, "B03"),
-             (nir, "B08"), (np.full((SIDE, SIDE), 0.20, np.float32), "B11")],
+            [
+                (np.full((SIDE, SIDE), 0.15, np.float32), "B04"),
+                (green, "B03"),
+                (nir, "B08"),
+                (np.full((SIDE, SIDE), 0.20, np.float32), "B11"),
+            ],
             start=1,
         ):
             dst.write(band, index)
@@ -186,8 +197,18 @@ def test_highlight_marks_the_class_that_actually_changed(tmp_path, tool) -> None
 
     highlight = np.array(Image.open(result.evidence.highlight_path))
     assert highlight.shape[2] == 4, "the highlight must be RGBA to composite over imagery"
-    marked = int(np.count_nonzero(highlight[:, :, 3]))
+
+    # Count by colour, not by alpha: the layer also traces the T1 shoreline in white, and
+    # those rim pixels are annotation rather than measured change.
+    from satquery.models.indices.render import render_change_alpha
+
+    gained_rgb = render_change_alpha(np.zeros((2, 2), dtype=bool), np.ones((2, 2), dtype=bool))[
+        0, 0, :3
+    ]
+    opaque = highlight[:, :, 3] > 0
+    gained = opaque & np.all(highlight[:, :, :3] == gained_rgb, axis=2)
+
     expected = 40 * 40 - 20 * 20  # the water square growing
-    assert marked == pytest.approx(expected, rel=0.02), (
-        f"highlight marked {marked} px; the water change is {expected} px"
+    assert int(gained.sum()) == pytest.approx(expected, rel=0.02), (
+        f"highlight marked {int(gained.sum())} gained px; the water change is {expected} px"
     )

@@ -75,22 +75,38 @@ def render_change_map(base_rgb: np.ndarray, mask_t1: np.ndarray, mask_t2: np.nda
     return out
 
 
+def _outline(mask: np.ndarray) -> np.ndarray:
+    """The one-pixel boundary of a mask, by 4-neighbour erosion. Pure NumPy, no scipy."""
+    solid = np.asarray(mask, dtype=bool)
+    eroded = solid.copy()
+    for shift, axis in ((1, 0), (-1, 0), (1, 1), (-1, 1)):
+        eroded &= np.roll(solid, shift, axis=axis)
+    # Rolling wraps at the border, so a mask touching the edge would lose its rim there.
+    eroded[0, :] = eroded[-1, :] = eroded[:, 0] = eroded[:, -1] = False
+    return solid & ~eroded
+
+
 def render_change_alpha(
     mask_t1: np.ndarray,
     mask_t2: np.ndarray,
     *,
-    rgb: tuple[int, int, int] = (255, 62, 78),
+    gained_rgb: tuple[int, int, int] = (255, 62, 78),
+    lost_rgb: tuple[int, int, int] = (255, 176, 32),
+    outline_rgb: tuple[int, int, int] = (255, 255, 255),
 ) -> np.ndarray:
-    """Changed pixels in one colour on a transparent field, as `(H, W, 4)` RGBA.
+    """Changed pixels on a transparent field, as `(H, W, 4)` RGBA.
 
     Made for laying over the live imagery rather than sitting in a tile, so everything
-    that did not change must be genuinely transparent -- a dimmed backdrop baked into the
+    that did not change is genuinely transparent -- a dimmed backdrop baked into the
     overlay would double-darken the scene underneath it.
 
-    Both directions are painted the same colour here, which is what makes it readable as
-    "this is what moved" at a glance. It is also why it is not the whole story: gain and
-    loss are different events, and `render_change_map` keeps them apart. The two are meant
-    to be read together.
+    Three marks, because a coloured blob alone cannot say what it was measured against.
+    Gain and loss get separate colours, and the T1 extent is traced as a one-pixel
+    outline. That outline is what makes the overlay self-explanatory: on a reservoir that
+    only filled, the changed region *is* most of the final water body, so the highlight
+    looks like the lake and a viewer reasonably concludes it is just drawing the water.
+    With the old shoreline drawn on top, the same picture reads as "everything outside
+    this line is new", which is the claim actually being made.
 
     The edge is deliberately hard, with no feathering. A soft edge would suggest the
     measurement has uncertainty at the boundary that the pixel count does not model.
@@ -100,12 +116,17 @@ def render_change_alpha(
     if first.shape != second.shape:
         raise ValueError(f"masks must share a grid, got {first.shape} and {second.shape}")
 
-    changed = first ^ second
-    out = np.zeros((*changed.shape, 4), dtype=np.uint8)
-    out[changed, 0] = rgb[0]
-    out[changed, 1] = rgb[1]
-    out[changed, 2] = rgb[2]
-    out[changed, 3] = 255
+    out = np.zeros((*first.shape, 4), dtype=np.uint8)
+
+    gained = ~first & second
+    lost = first & ~second
+    for region, colour in ((gained, gained_rgb), (lost, lost_rgb)):
+        out[region, 0], out[region, 1], out[region, 2] = colour
+        out[region, 3] = 255
+
+    rim = _outline(first)
+    out[rim, 0], out[rim, 1], out[rim, 2] = outline_rgb
+    out[rim, 3] = 255
     return out
 
 
