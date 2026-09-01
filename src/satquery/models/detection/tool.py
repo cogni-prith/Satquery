@@ -41,20 +41,51 @@ class ObjectDetectorTool(BaseTool):
         self.device = device
         self.size = size
 
+    @staticmethod
+    def _read_as_trained(ref) -> tuple[np.ndarray, list[str]]:
+        """Read exactly as the training pack did: raw bytes, no contrast stretch.
+
+        `load_model_input` percentile-stretches each raster into its own range. That is
+        right for the VLM, which was trained through it, and wrong here: this detector was
+        fitted on plain uint8 from VRSBench PNGs, so a stretch hands it a pixel
+        distribution it never saw.
+
+        Measured. On two tiles that certainly contain the class, the model scores
+        ground-track-field at 0.519 and 0.576 from raw pixels -- both above the operating
+        threshold -- and nothing at all through the stretched path. The model was never the
+        problem; the serving preprocessing was.
+        """
+        from satquery.io.raster import read_raster
+
+        array, parsed = read_raster(ref.path)
+        if array.shape[0] < 3:
+            band = array[0]
+            array = np.stack([band, band, band])
+        stack = array[:3].astype(np.float32)
+        # uint16 rasters and reflectance floats both need bringing onto the 0-255 range PIL
+        # delivered at training time.
+        peak = float(stack.max())
+        if peak > 255.0:
+            stack = stack / peak * 255.0
+        elif peak <= 1.5:
+            stack = stack * 255.0
+        return np.ascontiguousarray(stack.transpose(1, 2, 0)), list(parsed.warnings)
+
     def _run(self, request: ToolRequest) -> ToolResult:
         import torch
 
-        from satquery.models.base import load_model_input
         from satquery.symbolic.measures import object_count
 
-        rgb, warnings = load_model_input(request.images[0])
+        rgb, warnings = self._read_as_trained(request.images[0])
         height, width = rgb.shape[:2]
 
         from PIL import Image
 
         resized = (
             np.asarray(
-                Image.fromarray(rgb).resize((self.size, self.size), Image.BILINEAR),
+                Image.fromarray(rgb.astype(np.uint8)).resize(
+                    (self.size, self.size), Image.BILINEAR
+                ),
                 dtype=np.float32,
             )
             / 255.0
@@ -69,6 +100,10 @@ class ObjectDetectorTool(BaseTool):
             output = self.model([tensor])[0]
 
         scores = output["scores"].cpu().numpy()
+        # Kept before filtering so a near miss can be reported. With recall at 0.64 a
+        # borderline detection is common, and "nothing found" reads as a statement about
+        # the image when the truth is that the best candidate scored 0.48.
+        near_miss = self._best_below(output, scores, threshold, wanted=None)
         keep = scores >= threshold
         raw_boxes = output["boxes"].cpu().numpy()[keep]
         raw_labels = output["labels"].cpu().numpy()[keep]
@@ -140,7 +175,11 @@ class ObjectDetectorTool(BaseTool):
             request_id=request.request_id,
             tool_name=self.spec.name,
             tool_version=self.spec.version,
-            answer=verbalize(record) if counts else self._empty_answer(request.query, wanted),
+            answer=(
+                verbalize(record)
+                if counts
+                else self._empty_answer(request.query, wanted, near_miss)
+            ),
             evidence=Evidence(boxes=boxes),
             # A detection score is the model's own certainty, not agreement between two
             # independent estimates. Reporting it as confidence would be the softmax
@@ -155,7 +194,21 @@ class ObjectDetectorTool(BaseTool):
             answer_record=record.model_dump(mode="json"),
         )
 
-    def _empty_answer(self, query: str, wanted: set[str]) -> str:
+    def _best_below(self, output, scores, threshold: float, wanted) -> tuple[str, float] | None:
+        """The strongest detection that did NOT clear the threshold, if any."""
+        below = [i for i, score in enumerate(scores) if score < threshold]
+        if not below:
+            return None
+        labels = output["labels"].cpu().numpy()
+        best = max(below, key=lambda i: scores[i])
+        index = int(labels[best]) - 1
+        if not 0 <= index < len(self.vocabulary):
+            return None
+        return self.vocabulary[index], float(scores[best])
+
+    def _empty_answer(
+        self, query: str, wanted: set[str], near_miss: tuple[str, float] | None = None
+    ) -> str:
         """Say WHY nothing was found, which is usually the useful part.
 
         "No objects were found" is true and, on a scene that plainly contains the thing
@@ -172,10 +225,25 @@ class ObjectDetectorTool(BaseTool):
                 "asking for one of those classes, or phrase it as a description question "
                 "so the vision-language model handles it instead."
             )
+        asked = ", ".join(sorted(wanted))
+        if near_miss and near_miss[0] in wanted:
+            return (
+                f"No {asked} cleared the score threshold of {SCORE_THRESHOLD:.2f}, but the "
+                f"strongest candidate was a {near_miss[0]} at {near_miss[1]:.2f} -- a near "
+                "miss rather than an absence. This detector's measured recall is 0.64, so "
+                "roughly one labelled object in three is missed."
+            )
+        if near_miss:
+            return (
+                f"No {asked} was detected above {SCORE_THRESHOLD:.2f}. The strongest thing "
+                f"found anywhere in the scene was a {near_miss[0]} at {near_miss[1]:.2f}, "
+                "also below threshold. A negative result at this threshold on a detector "
+                "with measured recall of 0.64, not proof that none is present."
+            )
         return (
-            f"No {', '.join(sorted(wanted))} was detected above a score of "
-            f"{SCORE_THRESHOLD:.2f}. That is a negative result at this threshold on a "
-            "detector with measured recall of 0.64, not proof that none is present."
+            f"No {asked} was detected above a score of {SCORE_THRESHOLD:.2f}, and nothing "
+            "else scored either. A negative result at this threshold on a detector with "
+            "measured recall of 0.64, not proof that none is present."
         )
 
     def _requested_labels(self, query: str) -> set[str]:
