@@ -106,7 +106,55 @@ def _bind_vlm() -> None:
     _LOG.info("bound %d VLM tools on one EarthDial backbone", len(_VLM_TOOLS))
 
 
+def _bind_change_vqa() -> None:
+    """Bind v1's trained CDVQA head, if its checkpoint is on disk.
+
+    A discriminative classifier over the frozen 19-value CDVQA answer set, not a
+    generative model. The answer set is closed, so a classifier is both more accurate and
+    answers in milliseconds. Measured 0.678 and 0.644 exact match on CDVQA test-1 and
+    test-2.
+    """
+    from satquery.models.change.siamese import ChangeVqaTool
+    from satquery.utils.paths import artifact_root
+
+    base = artifact_root() / "train" / "change_head"
+    if not any(base.glob("checkpoint-*")):
+        _LOG.info("no CDVQA head under %s; change.vqa_head unregistered", base)
+        _drop("change.vqa_head")
+        return
+    REGISTRY.bind("change.vqa_head", ChangeVqaTool)
+    _LOG.info("bound change.vqa_head")
+
+
+def _bind_fusion() -> None:
+    """Bind v1's trained optical+SAR dual encoder, if its checkpoint is on disk.
+
+    The other place this system holds two independent estimates of one quantity: a learned
+    extraction and the spectral index behind it. Measured on reBEN validation, IoU 0.654
+    built-up and 0.904 water, with index agreement 0.803.
+    """
+    from satquery.models.fusion.dual_encoder import FusionExtractionTool
+
+    try:
+        probe = FusionExtractionTool()
+        checkpoint = probe.checkpoint_path()
+    except Exception as exc:
+        _LOG.warning("fusion tool would not construct (%s); unregistered", exc)
+        _drop("fusion.extraction")
+        return
+
+    if not checkpoint.is_file():
+        _LOG.info("no fusion checkpoint at %s; unregistered", checkpoint)
+        _drop("fusion.extraction")
+        return
+
+    REGISTRY.bind("fusion.extraction", FusionExtractionTool)
+    _LOG.info("bound fusion.extraction")
+
+
 _bind_landcover()
+_bind_change_vqa()
+_bind_fusion()
 
 # Opt-in. Loading a 4 GB backbone is not something an import should do to a test run or to
 # a CLI that only wanted to print the registry; the serving process asks for it by name.

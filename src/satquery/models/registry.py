@@ -204,7 +204,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "Scored separately from vlm.change_description; the router calls both."
         ),
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="change.mask",
@@ -257,7 +257,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "using the learned dual encoder cross-checked against the deterministic indices."
         ),
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="seg.landcover",

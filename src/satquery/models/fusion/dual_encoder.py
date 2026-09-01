@@ -540,7 +540,11 @@ class DualEncoderFusion:
             {
                 "state_dict": self._module.state_dict(),
                 "config": {**self.config.to_dict(), "targets": list(self.config.targets)},
-                "constants_fingerprint": constants_fingerprint(),
+                # Pinned to the pixel scope. This encoder reads bands, the SAR pipeline
+                # and index thresholds; it never sees an instruction template, so hashing
+                # those would make the guard fire on changes it cannot observe.
+                "constants_fingerprint": constants_fingerprint("pixels"),
+                "fingerprint_scope": "pixels",
             },
             resolved,
         )
@@ -583,7 +587,9 @@ class DualEncoderFusion:
         # file that may have arrived from anywhere.
         payload = torch.load(resolved, map_location="cpu", weights_only=True)
         recorded = payload.get("constants_fingerprint")
-        running = constants_fingerprint()
+        # Older checkpoints predate scoping and recorded the full hash; read the scope
+        # they were written with rather than assuming this one.
+        running = constants_fingerprint(payload.get("fingerprint_scope"))
         if recorded != running:
             message = (
                 "FROZEN CONSTANT DRIFT.\n"

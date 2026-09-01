@@ -50,3 +50,4 @@ lightning_logs/
 # Mined change pairs: regenerate with scripts/find_change_pairs.py rather than commit
 # 4.5 MB of derived rasters that the LMDB already holds.
 demo_inputs/pairs/*.tif
+demo_inputs/*_SAR.tif

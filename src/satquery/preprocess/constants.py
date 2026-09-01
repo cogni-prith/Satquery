@@ -44,6 +44,8 @@ __all__ = [
     "DB_EPS",
     "DB_SCALE",
     "EXCESS_GREEN_THRESHOLD",
+    "FINGERPRINT_EXCLUDED",
+    "FINGERPRINT_SCOPES",
     "FUSION_CLASS_INDEX",
     "FUSION_EXTRACTION_CLASSES",
     "FUSION_MASK_BACKGROUND",
@@ -519,22 +521,140 @@ CONFIDENCE_BANDS: Final[tuple[tuple[str, float], ...]] = (
 )
 
 
+#: Names EXCLUDED from the fingerprint.
+#:
+#: The fingerprint answers one question: "would a model trained earlier see different
+#: pixels or different tokens if it ran in this process?" Constants that cannot change
+#: that answer must be excluded, or the guard fires on work that did not touch
+#: preprocessing at all.
+#:
+#: That is not hypothetical. Hashing the whole module meant adding land-cover class names
+#: and RGB-change thresholds -- for capabilities that did not exist when the fusion
+#: encoder was trained, and which its preprocessing never consults -- invalidated its
+#: checkpoint. Verified at the time: no existing constant changed value and none was
+#: removed; nine were added. A guard that cries drift on every addition is one people
+#: learn to re-record their way past, which is exactly how real drift then slips through.
+#:
+#: Anything genuinely upstream of a model -- band names and order, index thresholds, the
+#: SAR pipeline, normalisation, tiling, instruction templates -- must NOT be listed here.
+FINGERPRINT_EXCLUDED: Final[frozenset[str]] = frozenset(
+    {
+        # Reporting thresholds: applied to measurements after a model has run.
+        "CHANGE_ABSOLUTE_FLOOR_M2",
+        "CHANGE_RELATIVE_FLOOR",
+        "CONFIDENCE_BANDS",
+        # Land-cover label vocabulary: the segmenter's own output space, and it carries
+        # its own config. Nothing trained before it consumes these.
+        "CORINE_LEVEL1_TO_CLASS",
+        "LANDCOVER_CLASSES",
+        "LANDCOVER_IGNORE_INDEX",
+        # RGB radiometric change: a separate tool with no learned weights at all.
+        "EXCESS_GREEN_THRESHOLD",
+        "FINGERPRINT_EXCLUDED",
+        "FINGERPRINT_SCOPES",
+        "RGB_CHANGE_DISTANCE_THRESHOLD",
+        "RGB_CHANGE_MIN_COMPONENT_PX",
+    }
+)
+
+
 def _frozen_values() -> dict[str, object]:
-    """Collect every exported constant into a JSON-serialisable mapping."""
+    """Collect the preprocessing-critical constants into a JSON-serialisable mapping."""
     module = globals()
     return {
         name: module[name]
         for name in sorted(__all__)
-        if name != "constants_fingerprint" and not callable(module[name])
+        if name != "constants_fingerprint"
+        and name not in FINGERPRINT_EXCLUDED
+        and not callable(module[name])
     }
 
 
-def constants_fingerprint() -> str:
-    """Return a stable SHA-256 over every frozen constant.
+#: Named subsets a model can pin itself to.
+#:
+#: One global fingerprint cannot serve models with disjoint inputs. The optical+SAR fusion
+#: encoder consumes band names, index thresholds and the SAR pipeline; it never sees an
+#: instruction template. Yet adding two VLM instruction constants invalidated its
+#: checkpoint, because the hash covered both. A guard that fires on changes a model cannot
+#: possibly observe is one people route around, and routing around it is how real drift
+#: gets through.
+#:
+#: A model pins the scope it actually depends on. `None` still hashes everything, which is
+#: the right default for anything that reads both pixels and prompts.
+FINGERPRINT_SCOPES: Final[dict[str, tuple[str, ...]]] = {
+    # Everything upstream of pixels reaching a model: which bands, in what order, scaled
+    # and stretched how, and every threshold applied to them.
+    "pixels": (
+        "BAND_ROLE_BLUE",
+        "BAND_ROLE_GREEN",
+        "BAND_ROLE_NIR",
+        "BAND_ROLE_RED",
+        "BAND_ROLE_SWIR",
+        "DB_EPS",
+        "DB_SCALE",
+        "IMAGENET_MEAN",
+        "IMAGENET_STD",
+        "INDEX_EPS",
+        "NDBI_BUILTUP_THRESHOLD",
+        "NDVI_VEGETATION_THRESHOLD",
+        "NDWI_WATER_THRESHOLD",
+        "SAR_PSEUDO_RGB_LAYOUT",
+        "SAR_WATER_DB_THRESHOLD",
+        "SPECKLE_FILTER_NUM_LOOKS",
+        "SPECKLE_FILTER_WINDOW",
+        "SPECKLE_SUBWINDOW",
+        "STRETCH_OUTPUT_RANGE",
+        "STRETCH_PERCENTILES",
+    ),
+    # What a language model is told, which decides its tokens as surely as bands decide
+    # a segmenter's pixels.
+    "instructions": (
+        "GSD_TOKEN_FORMAT",
+        "GSD_TOKEN_UNKNOWN",
+        "INSTRUCTION_CAPTION",
+        "INSTRUCTION_CHANGE_DESCRIPTION",
+        "INSTRUCTION_CHANGE_QUESTION_TEMPLATE",
+        "INSTRUCTION_REFER_TEMPLATE",
+        "INSTRUCTION_VQA_TEMPLATE",
+    ),
+}
 
-    Log this at the top of every training run and assert it in the eval harness. If
-    the fingerprint in a checkpoint does not match the fingerprint of the process
-    loading it, preprocessing has drifted and the scores are not comparable.
+
+def constants_fingerprint(scope: str | None = None) -> str:
+    """Return a stable SHA-256 over the preprocessing-critical constants.
+
+    Log this at the top of every training run and assert it in the eval harness. If the
+    fingerprint in a checkpoint does not match the fingerprint of the process loading it,
+    preprocessing has drifted and the scores are not comparable.
+
+    Scoped by `FINGERPRINT_EXCLUDED` to the constants that decide what a model actually
+    sees. Everything downstream of inference -- reporting thresholds, a newer model's own
+    label vocabulary -- is excluded, so adding a capability does not invalidate every
+    checkpoint that predates it.
+
+    Args:
+        scope: A key of `FINGERPRINT_SCOPES`, hashing only that subset, or `None` for
+            every included constant. A model should pin the narrowest scope that covers
+            what it reads: a wider one makes the guard fire on changes it cannot observe,
+            and a narrower one lets real drift through.
+
+    Raises:
+        KeyError: Unknown scope. Better than silently hashing everything and reporting a
+            mismatch the caller cannot explain.
     """
-    payload = json.dumps(_frozen_values(), sort_keys=True, default=list)
+    values = _frozen_values()
+    if scope is not None:
+        if scope not in FINGERPRINT_SCOPES:
+            raise KeyError(
+                f"unknown fingerprint scope {scope!r}; known: {sorted(FINGERPRINT_SCOPES)}"
+            )
+        names = FINGERPRINT_SCOPES[scope]
+        missing = [name for name in names if name not in values]
+        if missing:
+            raise KeyError(
+                f"scope {scope!r} names constants that do not exist: {missing}. A scope "
+                "that silently skips a constant would stop guarding it."
+            )
+        values = {name: values[name] for name in names}
+    payload = json.dumps(values, sort_keys=True, default=list)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
