@@ -1,0 +1,106 @@
+# NOTE ON REPRODUCIBILITY
+# `max_samples` is the binding constraint; `time_budget_s` is only a runaway guard set
+# roughly 2x the measured cost. This matters: when the clock cuts a task off partway, the
+# score depends on how fast the machine is, so the same commit scores differently on
+# different hardware. Sizes below come from measured per-sample cost on an RTX 4060, and
+# keep the whole suite inside the ten-minute budget the project requires.
+# The one suite `make eval` runs. Every row here is a mandatory or scored row of the
+# judging table in the architecture, and every row names the artifact it is proof for.
+#
+# Time budget. the suite is capped at ten minutes on a single GPU, so
+# `total_time_budget_s` is 600 and every `max_samples` is sized to fit inside its own
+# per-task budget. `EvalSuiteConfig.validate_budget` refuses to run if the per-task
+# budgets sum past the total, and `run_suite` skips remaining tasks once the total is
+# spent rather than silently overrunning.
+#
+# Sample caps are deliberately far below the full test splits. This suite is the
+# regression gate that must stay fast, not the final submission number; the full-split
+# run is a separate deliberate invocation with the caps raised.
+
+seed: 1337
+
+# Relative paths resolve under `artifact_root()` (`$SATQUERY_ARTIFACT_ROOT`, else
+# <repo>/artifacts). Never hardcode an absolute path here.
+output_dir: eval/full_suite
+
+total_time_budget_s: 600
+
+# SHA-256 over satquery.preprocess.constants, recorded when the adapter being scored
+# was trained. Left null until the first adapter exists: the harness then warns that
+# drift cannot be detected instead of failing. Once an adapter is trained, paste its
+# fingerprint here and `assert_constants_match` turns any later change to the frozen
+# constants into a loud error rather than a quietly incomparable score.
+constants_fingerprint: null
+
+tasks:
+  - name: rsvqa_vqa
+    requirement: Single-image VQA (mandatory)
+    dataset_config: data/rsvqa.yaml
+    split: test
+    task_type: vqa
+    tool_name: vlm.vqa
+    metrics: [exact_match, per_type]
+    max_samples: 200
+    time_budget_s: 110
+
+  - name: vrsbench_vqa
+    requirement: Single-image VQA (mandatory)
+    dataset_config: data/vrsbench.yaml
+    split: test
+    task_type: vqa
+    tool_name: vlm.vqa
+    metrics: [exact_match, per_type]
+    max_samples: 200
+    time_budget_s: 95
+
+  - name: vrsbench_caption
+    requirement: Second single-image task -- captioning
+    dataset_config: data/vrsbench.yaml
+    split: test
+    task_type: caption
+    tool_name: vlm.caption
+    metrics: [bleu4, meteor, rouge_l, cider]
+    max_samples: 60
+    time_budget_s: 150
+
+  - name: vrsbench_grounding
+    requirement: Second single-image task -- grounding, acc@0.5
+    dataset_config: data/vrsbench.yaml
+    split: test_referring
+    task_type: grounding
+    tool_name: vlm.grounding
+    metrics: [acc_at_0.5, acc_at_0.7]
+    max_samples: 120
+    time_budget_s: 120
+
+  - name: cdvqa_test_1
+    requirement: Bi-temporal change VQA (mandatory) -- official test-1
+    dataset_config: data/cdvqa.yaml
+    split: test_1
+    task_type: change_vqa
+    tool_name: change.vqa_head
+    metrics: [exact_match, per_type]
+    max_samples: 500
+    time_budget_s: 40
+
+  - name: cdvqa_test_2
+    requirement: Bi-temporal change VQA (mandatory) -- official test-2
+    dataset_config: data/cdvqa.yaml
+    split: test_2
+    task_type: change_vqa
+    tool_name: change.vqa_head
+    metrics: [exact_match, per_type]
+    max_samples: 500
+    time_budget_s: 40
+
+  - name: fusion_builtup_water
+    requirement: Optical and SAR pair analysis -- joint built-up and water extraction
+    dataset_config: data/bigearthnet_fusion.yaml
+    split: validation
+    task_type: fusion_extraction
+    tool_name: fusion.extraction
+    metrics: [builtup_iou, water_iou, index_agreement]
+    max_samples: 200
+    # 45s is the headroom left by the other six rows inside the suite's 600s ceiling.
+    # Measured at ~0.17s/sample once the patch rasters are cached, so 200 fits.
+    time_budget_s: 45

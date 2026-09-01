@@ -1,0 +1,27 @@
+# BigEarthNet v2.0 (reBEN) -- co-registered optical + SAR pairs for fusion extraction.
+#
+# Judging row served: "optical and SAR pair analysis".
+#
+# Distinct from data/bigearthnet_txt.yaml, which describes the *text annotation* corpus
+# built on the same imagery. This config is the imagery itself: 549,488 co-registered
+# Sentinel-1 / Sentinel-2 patches with CORINE reference maps, from Zenodo record
+# 10891137.
+#
+# Targets and their pixel encoding are frozen in preprocess/constants.py under
+# FUSION_EXTRACTION_CLASSES and are deliberately not retyped here -- that tuple is the
+# model's output-channel ordering.
+
+name: bigearthnet_fusion
+
+about:
+  url: https://bigearth.net
+  zenodo_record: 10891137
+  pairs: 549488
+  gsd_m: 10.0
+  splits: {train: 237871, validation: 122342, test: 119825}
+  licence: CDLA-Permissive-1.0
+
+# Evaluation reads the packed cache, not the LMDB. The LMDB lives on a spinning USB
+# drive where random reads run ~1,000x slower than sequential ones; scripts/
+# pack_fusion_cache.py streams it once into a flat memmap. See satquery/io/reben.py.
+packed_cache: ~/satquery-cache/fusion_packed

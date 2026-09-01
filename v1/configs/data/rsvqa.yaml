@@ -1,0 +1,33 @@
+# RSVQA -- closed-set single-image VQA. Evaluation only; not in the training mix.
+#
+# Judging row served: "single-image VQA (mandatory)".
+#
+# Answer normalisation is load-bearing here. The references are terse ("yes", "no",
+# counts, area classes) and an unnormalised "Yes." scores zero. See eval/answer_norm.py.
+name: rsvqa
+
+about:
+  url: https://rsvqa.sylvainlobry.com
+  paper: 'Lobry et al. 2020, RSVQA: Visual Question Answering for Remote Sensing Data'
+  licence: TBD - verify before release
+
+root: rsvqa
+
+split: test
+splits: [train, val, test, test_2]
+
+# One of RSVQA_SUBSETS. LR is Sentinel-2 at 10 m; HR is aerial at roughly 0.15 m, and
+# is the closer analogue of the sub-metre hidden evaluation set.
+subset: lr
+subsets: [lr, hr]
+
+modalities: [optical_rgb]
+
+# Question families reported separately. A model can look respectable overall while
+# sitting at chance on counting, so the per-type breakdown is what drives the next run.
+question_types: [presence, count, comparison, area, rural_urban]
+
+metrics: [exact_match_accuracy, average_per_type_accuracy]
+answer_normalisation: rsvqa    # key passed to eval.answer_norm.normalize_for_dataset
+
+checksums: {}

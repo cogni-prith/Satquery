@@ -1,0 +1,87 @@
+# Stage 1: LoRA adaptation of EarthDial-4B (RGB checkpoint) on the BigEarthNet.txt-led
+# mix. This run produces the mandatory "RS adaptation of a vision or VL component"
+# artifact: training log, adapter weights, before/after table.
+# Keys map one-for-one onto satquery.train.lora.LoraTrainConfig.
+
+model_config: configs/model/earthdial_4b_rgb.yaml
+data_config: configs/data/mix_v1.yaml
+
+run_name: lora_stage1
+# Relative, so it resolves under $SATQUERY_ARTIFACT_ROOT (artifacts/ by default).
+output_dir: train/lora_stage1
+seed: 1337
+
+# --- LoRA -------------------------------------------------------------------------
+# r=16 with alpha=2r is the standard setting for a 4B model on one GPU: enough
+# capacity for a domain shift (Sentinel imagery + GSD token) without the instability
+# of a higher rank at this batch size.
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+lora_bias: none
+lora_task_type: null        # NOT CAUSAL_LM. InternVLChatModel.forward takes
+                            # pixel_values and image_flags and rejects inputs_embeds,
+                            # which PeftModelForCausalLM always passes. null selects the
+                            # generic PeftModel, which forwards kwargs untouched.
+# Attention + MLP projections of the InternVL-style language tower. Adapting the MLP
+# as well as attention matters here because the shift is domain knowledge, not just
+# instruction style.
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+# Left empty deliberately: the GSD token is a plain text prefix using existing
+# vocabulary, so no embedding layer needs to be unfrozen and fully saved.
+lora_modules_to_save: []
+
+# --- TrainingArguments --------------------------------------------------------------
+num_train_epochs: 1.0
+max_steps: 2000             # Resuming from checkpoint-500. That adapter already gave
+                            # grounding acc@0.5 0.147 -> 0.333 and VQA 0.367 -> 0.593;
+                            # the weak row is captioning (BLEU-4 0.107), which had the
+                            # smallest slice of the mix. More steps is the lever.
+                            # GPU overnight before we know it converges. 2000 steps at
+                            # grad-accum 16 is ~32k samples, ~22% of one VRSBench epoch.
+                            # Raise once the "after" numbers show the setup works.
+# Effective batch = 1 x 16 = 16 sequences. A 4B VLM with multi-tile image inputs at
+# bf16 will not fit more than one sample per device on a 24 GB card.
+per_device_train_batch_size: 1
+per_device_eval_batch_size: 1
+gradient_accumulation_steps: 16
+# 1e-4 is the usual LoRA rate: two orders above a full fine-tune, because only the
+# low-rank matrices move.
+learning_rate: 1.0e-4
+lr_scheduler_type: cosine
+warmup_ratio: 0.03
+weight_decay: 0.0
+max_grad_norm: 1.0
+bf16: true
+fp16: false
+# Required to fit the 4B backbone plus activations; costs roughly 30% throughput.
+gradient_checkpointing: true
+logging_steps: 10
+eval_strategy: steps
+eval_steps: 500
+save_strategy: steps
+# 150 steps is ~35 minutes at the measured 13.6 s/step. 500 was ~1.9 hours, which
+# meant a laptop closed after an hour lost everything -- resume_from_checkpoint='auto'
+# can only resume from a checkpoint that exists.
+save_steps: 150
+save_total_limit: 6         # more frequent saves, so keep a few more
+                            # checkpoint and came within one save of deleting it.
+dataloader_num_workers: 4
+# Samples carry raster fields the Trainer must not strip before the collator runs.
+remove_unused_columns: false
+# null -> satquery.utils.logging.tracker_backend(): wandb if WANDB_API_KEY is set,
+# tensorboard otherwise.
+report_to: null
+
+throughput_log_every_n_steps: 50
+
+# Continue the existing adaptation rather than starting over. "auto" takes the highest
+# checkpoint present; optimizer and LR-scheduler state are restored with the weights.
+resume_from_checkpoint: auto
