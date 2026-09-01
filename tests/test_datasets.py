@@ -244,7 +244,7 @@ def _spec_with(weights: dict[str, float]):
 
 
 def test_mix_draws_in_the_declared_proportions() -> None:
-    """The 40/40/20 blend is specified in CLAUDE.md; a mixer that silently drew uniformly
+    """The 40/40/20 blend is specified in the architecture; a mixer that silently drew uniformly
     would train on the wrong distribution while every log line still looked correct."""
     import collections
 

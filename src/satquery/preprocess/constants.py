@@ -301,7 +301,7 @@ BOX_COORDINATE_SCALE: Final[float] = 100.0
 # CDVQA closed answer set
 # --------------------------------------------------------------------------------------
 # VERIFIED against the published annotations (github.com/YZHJessica/CDVQA), all four
-# splits: the answer vocabulary is exactly 19 values, not the six CLAUDE.md describes.
+# splits: the answer vocabulary is exactly 19 values, not the six the architecture describes.
 #
 # The six land-cover classes are the answer set for only three of the eight question
 # types, and cover 23.4% of answers. The other 76.6% are yes/no (52.2%) and change-ratio
@@ -336,8 +336,8 @@ CDVQA_ANSWERS: Final[tuple[str, ...]] = (
 )
 
 #: The land-cover subset, in the dataset's own token spelling. Reported as a breakdown so
-#: the CLAUDE.md six-class framing still has a number, but it is NOT the head's output.
-#: Note the tokens are `NVG_surface` etc., not the prose CLAUDE.md quotes.
+#: the six-class framing still has a number, but it is NOT the head's output.
+#: Note the tokens are `NVG_surface` etc., not the prose the architecture quotes.
 CDVQA_LAND_COVER_ANSWERS: Final[tuple[str, ...]] = (
     "NVG_surface",
     "buildings",
@@ -347,7 +347,7 @@ CDVQA_LAND_COVER_ANSWERS: Final[tuple[str, ...]] = (
     "playgrounds",
 )
 
-#: The eight question types, used for per-type accuracy. Not mentioned in CLAUDE.md.
+#: The eight question types, used for per-type accuracy. Not mentioned in the architecture.
 CDVQA_QUESTION_TYPES: Final[tuple[str, ...]] = (
     "change_or_not",
     "change_ratio_types",

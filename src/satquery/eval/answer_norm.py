@@ -40,7 +40,7 @@ _NO_FORMS: frozenset[str] = frozenset({"no", "n", "false", "nope", "negative", "
 # dataset's own tokens from `CDVQA_ANSWERS`.
 #
 # Note the dataset spells the land-cover classes `NVG_surface`, `low_vegetation` and so
-# on -- NOT the prose CLAUDE.md quotes. A model that answers in prose, or a reference
+# on -- NOT the prose quoted elsewhere. A model that answers in prose, or a reference
 # quoted from the paper rather than the data, has to land on the dataset token or it
 # scores zero.
 _CDVQA_SYNONYMS: dict[str, str] = {

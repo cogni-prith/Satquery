@@ -19,7 +19,7 @@ One card per dataset used by `satquery-ml`. Read this before writing or changing
   affine transform (via `satquery.preprocess.gsd`); `Sample.prompt()` prefixes the frozen token.
   A loader that formats a token itself is a bug.
 - **Counts.** Every headline number below is quoted from the dataset's own documentation as
-  recorded in `CLAUDE.md`. Where `CLAUDE.md` does not state a number, the cell reads `TBD` and
+  recorded in `the architecture`. Where `the architecture` does not state a number, the cell reads `TBD` and
   stays `TBD` until someone counts the files on disk. No number here is inferred.
 - **Licences.** A licence cell reads `TBD - verify before release` unless it has been read off the
   dataset's own repository or paper by a human. Guessing a licence is not a shortcut, it is a legal
@@ -42,7 +42,7 @@ One card per dataset used by `satquery-ml`. Read this before writing or changing
 | Licence | TBD - verify before release |
 | Splits we use | Train split for the LoRA adaptation; official validation split for the before/after table. Test split is not used for tuning. |
 
-**Accuracy note, mandatory.** `CLAUDE.md` records the arXiv identifier as `2603.29630`. That is
+**Accuracy note, mandatory.** `the architecture` records the arXiv identifier as `2603.29630`. That is
 **unverified and structurally suspicious**: an arXiv YYMM prefix of `2603` places the paper in
 March 2026, and the five-digit sequence number is at the top of the plausible range. It may be a
 transcription error for a different identifier. **Confirm this against arxiv.org before it appears
@@ -70,7 +70,7 @@ absolute `xyxy` pixels in the source raster's grid, matching `BoundingBox`. Mult
 - S1 and S2 for a patch are co-registered but are *separate files*; pairing them is the loader's
   responsibility and a mis-pair is silent.
 - Everything here is 10 m. This dataset is the single largest contributor to the resolution gap
-  described in `CLAUDE.md`; aggressive scale resampling on this source is not optional.
+  described in `the architecture`; aggressive scale resampling on this source is not optional.
 - Annotation volume (~9.6M) means the loader must index lazily. Do not materialise the annotation
   set in memory.
 - The reBEN patch grid is European. Land-cover priors learned here do not transfer to Indian
@@ -121,7 +121,7 @@ the judge's input.
 | Field | Value |
 |---|---|
 | Role | Single-image **eval only**: closed-set VQA. This is a mandatory-row proof artifact. |
-| Canonical URL | https://rsvqa.sylvainlobry.com — **unverified**, `CLAUDE.md` gives no URL for RSVQA; confirm before it appears in a submission |
+| Canonical URL | https://rsvqa.sylvainlobry.com — **unverified**, `the architecture` gives no URL for RSVQA; confirm before it appears in a submission |
 | Headline counts | TBD |
 | Image size | TBD |
 | GSD | TBD (the low-resolution and high-resolution subsets differ; record per subset once verified) |
@@ -183,7 +183,7 @@ the schema assumes it. Answers are mapped onto the frozen six-class tuple; an an
 not map is a loader error, never a silent drop.
 
 **Gotchas.**
-- `CLAUDE.md` is explicit: **do not route CDVQA through the VLM alone.** A generative model against a
+- `the architecture` is explicit: **do not route CDVQA through the VLM alone.** A generative model against a
   six-way closed set loses to a Siamese encoder plus a small classification head, and the head runs in
   milliseconds. Route both, report both.
 - The QA pairs are auto-generated, so they carry template artefacts. A model can score well by
@@ -198,7 +198,7 @@ not map is a loader error, never a silent drop.
 | Field | Value |
 |---|---|
 | Role | **Optional.** Change-mask segmentation head training only. First thing to cut if we fall behind. |
-| Canonical URL | https://chenhao.in/LEVIR/ — **unverified**, `CLAUDE.md` gives no URL for LEVIR-CD; confirm before it appears in a submission |
+| Canonical URL | https://chenhao.in/LEVIR/ — **unverified**, `the architecture` gives no URL for LEVIR-CD; confirm before it appears in a submission |
 | Headline counts | TBD |
 | Image size | TBD |
 | GSD | TBD |
@@ -223,7 +223,7 @@ as optional; do not let it consume time that the mandatory rows need.
 | Field | Value |
 |---|---|
 | Role | **Optional.** Semantic change-mask training, and the source imagery behind CDVQA. |
-| Canonical URL | https://captain-whu.github.io/SCD/ — **unverified**, `CLAUDE.md` gives no URL for SECOND; confirm before it appears in a submission |
+| Canonical URL | https://captain-whu.github.io/SCD/ — **unverified**, `the architecture` gives no URL for SECOND; confirm before it appears in a submission |
 | Headline counts | TBD |
 | Image size | 512 x 512 |
 | GSD | TBD |

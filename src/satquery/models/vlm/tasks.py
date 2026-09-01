@@ -1,7 +1,7 @@
 """Task wrappers that turn one EarthDial backbone into three registered tools.
 
 `VqaTool`, `CaptionTool` and `GroundingTool` are the single-image half of the
-problem statement: VQA is mandatory, and CLAUDE.md commits to doing both of the
+problem statement: VQA is mandatory, and the architecture commits to doing both of the
 "one more single-image task" options, captioning and grounding.
 
 Each class is thin on purpose. It owns:
@@ -390,7 +390,7 @@ class GroundingTool(VlmTaskTool):
 class ChangeDescriptionTool(VlmTaskTool):
     """`vlm.change_description` -- the generative half of the change doctrine.
 
-    `CLAUDE.md` is explicit that CDVQA must not be routed through the VLM alone: the answer
+    `the architecture` is explicit that CDVQA must not be routed through the VLM alone: the answer
     set is closed over nineteen values, so a discriminative head beats a generative model on
     the scored metric and answers in milliseconds. But it is equally explicit that the VLM
     keeps the free-form job and that the router should "route both, report both".

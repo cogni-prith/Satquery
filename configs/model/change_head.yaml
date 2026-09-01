@@ -1,6 +1,6 @@
 # Two-tower discriminative head for CDVQA.
 #
-# Doctrine (CLAUDE.md): do not route CDVQA through the VLM alone. The answer set is
+# Doctrine: do not route CDVQA through the VLM alone. The answer set is
 # closed, so a classifier beats a generative model on accuracy and runs in milliseconds.
 # The VLM still produces the free-form change description; this head produces the scored
 # answer. Both are routed, both are reported.
@@ -11,7 +11,7 @@
 # fused in before classification.
 #
 # Output width is NOT set here. It is len(CDVQA_ANSWERS) from preprocess/constants.py,
-# which is 19 -- VERIFIED against the published annotations, not the six classes CLAUDE.md
+# which is 19 -- VERIFIED against the published annotations, not the six classes the earlier draft
 # describes. The six land-cover classes cover only 23.4% of answers; yes/no is 52.2% and
 # change-ratio buckets are 24.4%. A six-way head would cap out around 23%.
 

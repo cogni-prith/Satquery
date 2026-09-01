@@ -54,7 +54,7 @@ def test_every_cdvqa_class_normalises_back_to_itself() -> None:
 
 def test_cdvqa_synonyms_map_onto_the_closed_set() -> None:
     assert normalize_cdvqa_class("Building") == "buildings"
-    # The dataset's own token is `NVG_surface`, not the prose CLAUDE.md quotes.
+    # The dataset's own token is `NVG_surface`, not the prose the architecture quotes.
     assert normalize_cdvqa_class("non vegetated ground surface") == "NVG_surface"
     assert normalize_cdvqa_class("NVG surface") == "NVG_surface"
 

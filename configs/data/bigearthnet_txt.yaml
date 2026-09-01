@@ -6,13 +6,13 @@ name: bigearthnet_txt
 
 about:
   url: https://txt.bigearth.net
-  # UNVERIFIED. The arXiv id below comes from CLAUDE.md and has not been confirmed
+  # UNVERIFIED. The arXiv id below was recorded from a secondary source and has not been confirmed
   # against arXiv. The sequence number is implausibly high for a single month; do not
   # cite it in a submission until someone has opened the page.
   arxiv: "2603.29630 (UNVERIFIED)"
   built_on: BigEarthNet v2.0 (reBEN)
   pairs: 464044          # co-registered Sentinel-1 and Sentinel-2 pairs
-  annotations: 9600000   # approximate, per CLAUDE.md
+  annotations: 9600000   # approximate, by project rule
   tasks_upstream: 15
   countries: 10
   licence: TBD - verify before release

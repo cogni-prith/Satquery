@@ -40,7 +40,7 @@ backend cannot see it, the frontend cannot render it, and a judge cannot score i
 ### Stability
 
 Changing `serve/contracts.py` or `models/registry.py` is a **cross-team event**. The rule, from
-`CLAUDE.md`:
+`the architecture`:
 
 > Update `docs/INTERFACE.md` in the same commit and say so in the commit message.
 

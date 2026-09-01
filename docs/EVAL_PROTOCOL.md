@@ -71,7 +71,7 @@ ours at scoring time.
 
 The scored answer comes from the discriminative Siamese head (`change.vqa_head`), not from the
 generative VLM. Accuracy is exact match over the frozen **19-value** answer set in
-`CDVQA_ANSWERS` (VERIFIED against the published annotations; CLAUDE.md's "six classes"
+`CDVQA_ANSWERS` (VERIFIED against the published annotations; the project's "six classes"
 are only the land-cover subset, 23.4% of answers):
 
 `non-vegetated ground surface`, `buildings`, `playgrounds`, `water`, `low vegetation`, `trees`
@@ -191,7 +191,7 @@ Accuracy by question type (test_1 / test_2):
   genuinely different difficulties: the second requires quantifying and ordering change
   across all six land-cover classes from a single forward pass.
 - **The six-class framing would have cost most of this.** The land-cover subset alone
-  scores 0.434 on 8,799 of 39,686 questions. A six-way head built to CLAUDE.md's spec
+  scores 0.434 on 8,799 of 39,686 questions. A six-way head built to the project's spec
   could not have answered the other 76.6% at all.
 - **test_1 and test_2 differ mainly by question mix**, not by difficulty: per-type
   accuracies are nearly identical, and the 4.6-point gap in the headline is explained by
@@ -306,7 +306,7 @@ Training was stopped at 500 of 2000 planned steps to measure early. The optimize
 on disk, so the run is resumable. Training loss had plateaued around 0.8 since roughly step
 60, so further gains from more steps of the same recipe are uncertain -- but the mix was
 also incomplete (VRSBench only; BigEarthNet.txt and CDVQA were absent), so this is not the
-configuration CLAUDE.md specifies.
+configuration the architecture specifies.
 
 ## Measured baseline: EarthDial-4B, no adapter
 
@@ -347,7 +347,7 @@ VQA by question type:
    samples; those cells are indicative, not reliable. The full split is 37,409 VQA and
    16,159 referring records.
 3. **This is the unadapted base model.** It is the number the fine-tune has to beat, and
-   the reason CLAUDE.md calls the fine-tune mandatory rather than polish.
+   the reason the architecture calls the fine-tune mandatory rather than polish.
 
 The shape of the result is the useful part: the model is strong on existence and
 presence (0.92) and near-useless on counting, direction, size and scene type. That is

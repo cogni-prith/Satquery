@@ -3,11 +3,11 @@
 # roughly 2x the measured cost. This matters: when the clock cuts a task off partway, the
 # score depends on how fast the machine is, so the same commit scores differently on
 # different hardware. Sizes below come from measured per-sample cost on an RTX 4060, and
-# keep the whole suite inside the ten-minute budget CLAUDE.md requires.
+# keep the whole suite inside the ten-minute budget the project requires.
 # The one suite `make eval` runs. Every row here is a mandatory or scored row of the
-# judging table in CLAUDE.md, and every row names the artifact it is proof for.
+# judging table in the architecture, and every row names the artifact it is proof for.
 #
-# Time budget. CLAUDE.md caps the full suite at ten minutes on a single GPU, so
+# Time budget. the suite is capped at ten minutes on a single GPU, so
 # `total_time_budget_s` is 600 and every `max_samples` is sized to fit inside its own
 # per-task budget. `EvalSuiteConfig.validate_budget` refuses to run if the per-task
 # budgets sum past the total, and `run_suite` skips remaining tasks once the total is

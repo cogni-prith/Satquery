@@ -1,6 +1,6 @@
 """The evaluation harness: one entry point that runs every scored row.
 
-CLAUDE.md fixes two hard requirements on this module.
+Two hard requirements are fixed on this module.
 
 1. **One command runs all evals** (`make eval`). That command must succeed today,
    while every learned tool is still an honest stub, and it must report those tools
@@ -48,7 +48,7 @@ __all__ = [
 logger = get_logger(__name__)
 
 #: The only value a metric may take when its evaluation did not run. Never zero,
-#: never a guess. CLAUDE.md: fabricated scores are worse than no scores.
+#: never a guess: fabricated scores are worse than no scores.
 NOT_RUN = "TBD"
 
 _STATUS_OK = "ok"
@@ -70,7 +70,7 @@ class EvalTask:
         metrics: Metric identifiers this row reports, e.g. `["exact_match", "per_type"]`.
         max_samples: Cap on scored samples, chosen to keep the suite inside its budget.
         time_budget_s: Wall-clock budget for this task alone, in seconds.
-        requirement: The CLAUDE.md judging-table row this task is the proof artifact for.
+        requirement: The judging-table row this task is the proof artifact for.
     """
 
     name: str
@@ -156,7 +156,7 @@ class EvalSuiteConfig:
 
         Raises:
             ValueError: The budgets are inconsistent, which would let `make eval`
-                blow through the ten-minute ceiling CLAUDE.md sets.
+                blow through the ten-minute ceiling.
         """
         if self.total_time_budget_s <= 0:
             raise ValueError("total_time_budget_s must be positive")
@@ -581,7 +581,7 @@ def run_suite(cfg: EvalSuiteConfig, registry: ToolRegistry | None = None) -> dic
     )
     if total_elapsed > cfg.total_time_budget_s:
         logger.warning(
-            "suite took %.1fs, over the %.0fs budget CLAUDE.md sets for `make eval`",
+            "suite took %.1fs, over the %.0fs budget set for `make eval`",
             total_elapsed,
             cfg.total_time_budget_s,
         )

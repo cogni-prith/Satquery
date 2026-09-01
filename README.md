@@ -48,7 +48,7 @@ make env
 > an RTX 4060, TensorFlow 2.15 and transformers 5.1. Override per-invocation with
 > `make PY=/path/to/python <target>`.
 >
-> Note this is **Python 3.10**, while CLAUDE.md specifies 3.11. The code is written to
+> Note this is **Python 3.10**, while the architecture specifies 3.11. The code is written to
 > run on both: `serve/contracts.py` imports the real `enum.StrEnum` on 3.11+ and falls
 > back to an equivalent shim on 3.10. A working CUDA build of torch is worth more than
 > the version convention.
@@ -82,7 +82,7 @@ being confusing.
 
 ```
 satquery-ml/
-├── CLAUDE.md            Project law. The rules everything here obeys. Read it.
+├── the architecture            Project law. The rules everything here obeys. Read it.
 ├── README.md            You are here.
 ├── Makefile             Every command you need. Run `make` to list them.
 ├── pyproject.toml       Dependencies. Base group = CPU only; `gpu` group = torch etc.
@@ -237,7 +237,7 @@ Then `make PY=~/miniconda3/envs/satquery/bin/python test`.
 Then load the EarthDial-4B backbone in `src/satquery/models/vlm/backbone.py`.
 
 > ⚠️ The HuggingFace repo IDs in the configs are **unverified** — they came from
-> CLAUDE.md and nobody has confirmed them against the Hub. Check them before you trust a
+> the architecture and nobody has confirmed them against the Hub. Check them before you trust a
 > download. If EarthDial misbehaves, the documented fallback order is GeoChat, then
 > Qwen2.5-VL-7B. Do not restructure the repo around a fallback until the primary has
 > actually failed an inference test.

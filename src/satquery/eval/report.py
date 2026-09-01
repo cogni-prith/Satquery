@@ -5,7 +5,7 @@ Three outputs, all of them real:
 - `write_scores_table` -- the markdown scores table, one row per scored requirement.
 - `write_json` -- the same results as machine-readable JSON, for diffing runs.
 - `render_before_after` -- the before/after table proving remote-sensing adaptation,
-  which CLAUDE.md lists as the proof artifact for the LoRA row.
+  the proof artifact for the LoRA row.
 
 The single rule this module enforces: a metric that did not run renders as the
 literal string ``TBD``. Never a zero, never an interpolation, never a plausible
@@ -172,7 +172,7 @@ def render_before_after(
 ) -> str:
     """Render the before/after remote-sensing adaptation table.
 
-    CLAUDE.md names this the proof artifact for the "RS adaptation of a vision or VL
+    this is the proof artifact for the "RS adaptation of a vision or VL
     component" row, alongside the training log and the adapter weights. A generic VLM
     with no remote-sensing adaptation fails the problem statement outright, so this
     table has to show a real delta from a real pair of runs.

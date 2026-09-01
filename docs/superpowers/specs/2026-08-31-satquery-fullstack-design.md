@@ -10,7 +10,7 @@ The ML layer (`satquery` v0.1.0) is complete: 9 tools behind a versioned
 `make eval` on freshly downloaded data. The team now owns the whole stack.
 
 This spec covers `satquery-backend` (FastAPI) and `satquery-frontend` (React). Both are
-**separate repositories**. `CLAUDE.md` forbids HTTP, frontend, queue and ORM code inside
+**separate repositories**. `the architecture` forbids HTTP, frontend, queue and ORM code inside
 `satquery-ml`, and that rule stands even though the same team now owns everything: the ML
 repo's value is that it is a clean importable library with a typed boundary, and that
 boundary is what caught the adapter regression, the double-render bug and two misplaced
@@ -86,7 +86,7 @@ than at query time.
 
 ## The router
 
-Two stages, per `CLAUDE.md`. Not a free-form ReAct loop.
+Two stages, per `the architecture`. Not a free-form ReAct loop.
 
 **Stage one — deterministic gate.** `REGISTRY.candidates(input_config, modalities, gsd_m,
 task)` narrows the tool set from parsed raster metadata. One image gives VQA, caption,
@@ -101,7 +101,7 @@ Every stage appends a `TraceStep`, **including fallback paths**, so the trace is
 even when selection is uncertain. A judge asking "how did it decide that?" sees the gate's
 candidate list, the selection, and the reason.
 
-The constrained-classification-via-LLM variant described in `CLAUDE.md` is deferred: with 6
+The constrained-classification-via-LLM variant described in `the architecture` is deferred: with 6
 implemented tools and a deterministic gate that usually narrows to 1–3 candidates, keyword
 selection covers the demo, and a second model call would add latency and a failure mode for
 no measured gain. The seam is a single `select()` function, so upgrading is local.

@@ -3,7 +3,7 @@
 **OPTIONAL.** The problem statement lists a pixel-accurate change mask as a nice-to-have,
 not a mandatory row on the scoring table -- the mandatory bi-temporal requirement is
 satisfied by `change.vqa_head` (CDVQA accuracy) and `vlm.change_description`. Per
-CLAUDE.md this module is therefore **the first thing to cut if the team falls behind**.
+the architecture this module is therefore **the first thing to cut if the team falls behind**.
 Nothing else in the repo may take a hard dependency on it.
 
 Single responsibility: given two co-registered dates, emit a single-channel binary
