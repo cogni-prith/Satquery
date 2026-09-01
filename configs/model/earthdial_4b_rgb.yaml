@@ -1,0 +1,94 @@
+# EarthDial-4B, optical / RGB checkpoint.
+#
+# VERIFIED against the HuggingFace Hub: `akshaydudhane/EarthDial_4B_RGB` exists and is
+# 8.29 GB across two safetensors shards. Architecture is InternVLChatModel --
+# InternViT-300M (24 layers, 1024 hidden, 448 px, patch 14) plus Phi-3-mini
+# (32 layers, 3072 hidden), i.e. a fine-tune of OpenGVLab/InternVL2-4B.
+#
+# NOTE: the repo's config.json `auto_map` points at configuration_internvl_chat.py,
+# modeling_internvl_chat.py, configuration_phi3.py and modeling_phi3.py, but the repo
+# does NOT ship those files. `trust_remote_code` therefore fails until they are copied
+# in from OpenGVLab/InternVL2-4B. `scripts/fetch_model.py` does exactly that; run it
+# via `make fetch-model` before the first load.
+#
+# Fallback order if this checkpoint fails a real inference smoke test: GeoChat, then
+# Qwen2.5-VL-7B fine-tuned on our mix. Not before.
+#
+# Top-level keys map one-to-one onto satquery.models.vlm.backbone.BackboneConfig.
+# The `lora:` and `inference:` blocks are read by the train config and by the tool
+# wrappers respectively; BackboneConfig.from_config ignores them. Keep key names stable.
+
+hf_repo_id: akshaydudhane/EarthDial_4B_RGB
+revision: null              # pin a commit sha before the final submission run
+dtype: bfloat16
+device_map: auto
+load_in_4bit: true          # REQUIRED on the 8 GB RTX 4060: the base is 8.29 GB in
+                            # bf16, which does not leave room for activations. NF4
+                            # brings the weights to roughly 2.5 GB. Set false only
+                            # on a 24 GB card, and note that changing this changes
+                            # numerics, so keep it identical for train and eval.
+image_size: 448             # InternVL tile edge; do not change after training starts
+max_tiles: 6                # MEASURED, and TRAIN/EVAL-COUPLED. Read by both the training
+                            # collator and the inference path, on purpose: tiling
+                            # differently at train and eval time is exactly the drift
+                            # the frozen constants exist to prevent.
+                            #
+                            # 6 is the checkpoint's own max_dynamic_patch. Each tile is
+                            # 256 image tokens; 6 + thumbnail = 1792. Measured peak VRAM
+                            # for a real training step on an 8 GB RTX 4060, gradient
+                            # checkpointing on:
+                            #     1 tile  ->  3.44 GB      5 tiles ->  4.75 GB
+                            #     3 tiles ->  3.93 GB      7 tiles ->  5.93 GB
+                            # So the full budget fits with ~2.2 GB spare.
+                            #
+                            # Note this has NO effect on VRSBench: InternVL selects the
+                            # tile grid by aspect ratio, and a square 512x512 resolves to
+                            # 1x1 whatever the budget. It matters for non-square and
+                            # larger scenes -- 2:1 gives 3 tiles, 2048x2048 gives 5 --
+                            # i.e. for the Cartosat imagery in the hidden eval set.
+
+trust_remote_code: true     # EarthDial ships InternVL custom modelling code
+adapter_path: train/lora_stage1/adapter   # relative to $SATQUERY_ARTIFACT_ROOT
+                            # THE shipped adapter, and it is now the step-2000 save: the
+                            # 2,000-step run wrote here on completion, replacing the
+                            # checkpoint-500 copy that used to sit at this path.
+                            #
+                            # MEASURED, full suite, checkpoint-500 vs checkpoint-2000:
+                            #   rsvqa exact match        0.6500 -> 0.6550
+                            #   vrsbench vqa exact match 0.5600 -> 0.6200
+                            #   vrsbench grounding @0.5  0.3333 -> 0.3667
+                            #   vrsbench caption BLEU-4  0.1037 -> 0.1161
+                            #   cdvqa test-1 / test-2    0.6780 / 0.6440, unchanged
+                            #
+                            # Every row sits inside its confidence interval -- VRSBench VQA
+                            # is closest at +0.060 against +/-0.069 -- so step-2000 is not
+                            # defensibly better than step-500, only not worse. It ships
+                            # because it is what the completed run produced, not because
+                            # the extra 1,500 steps bought anything.
+                            #
+                            # checkpoint-500 survives as checkpoint-500-preserved; the
+                            # drive's save_total_limit had evicted the original.
+                            # Set null for base.
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+  # Language-model attention and MLP projections only. The vision tower stays frozen:
+  # the resolution gap is handled by the GSD token and by scale resampling, not by
+  # retraining a ViT on 10 m tiles it would then overfit to.
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+
+inference:
+  max_new_tokens: 128
+  temperature: 0.0          # greedy; VQA and grounding are scored on exact-ish match
+  num_beams: 1

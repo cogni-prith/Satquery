@@ -9,10 +9,18 @@ implemented` says which is which, so the backend can build against the real shap
 the API today and get a `NotImplementedError` -- never a fabricated answer -- if it
 calls a tool whose weights are not trained.
 
-In v2 that flag is False for every learned tool. The specs were carried over from v1,
-where the flags were accurate; carrying the flags over with them would have told the
-backend that six tools it cannot call are ready. `indices.deterministic` is the one
-True, because it is closed-form arithmetic with no weights to be missing.
+A spec is `implemented` only where weights exist and have been scored. The four VLM tools
+are back to True: v1's EarthDial adapter is trained and measured (rsvqa 0.655, vrsbench
+vqa 0.620, grounding acc@0.5 0.367, caption BLEU-4 0.116). `seg.landcover` is True
+(validation IoU water 0.95, built-up 0.60). `indices.deterministic` and
+`change.radiometric` are closed-form and have no weights to be missing.
+
+`detector.openvocab`, `change.mask` and `fusion.extraction` stay False -- those genuinely
+have no trained weights, and a capability list that overstates is worse than a short one.
+
+Binding is still conditional at load time: `serve/tools.py` unregisters a spec whose
+weights turn out to be absent, so a deployment without the adapter offers less rather than
+failing on every call.
 
 Changing this file is a cross-team event: update `docs/INTERFACE.md` in the same
 commit and say so in the commit message.
@@ -74,7 +82,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Answer a natural-language question about a single remote sensing image.",
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="vlm.caption",
@@ -88,7 +96,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Describe the land cover and major objects visible in a single image.",
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="vlm.grounding",
@@ -117,7 +125,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "preferred when the phrase is descriptive rather than a bare object class."
         ),
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="detector.openvocab",
@@ -169,7 +177,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["answer", "confidence"],
         description="Free-form description of what changed between two co-registered dates.",
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="change.vqa_head",
