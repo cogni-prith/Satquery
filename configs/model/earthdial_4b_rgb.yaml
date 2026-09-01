@@ -48,6 +48,23 @@ max_tiles: 6                # MEASURED, and TRAIN/EVAL-COUPLED. Read by both the
                             # i.e. for the Cartosat imagery in the hidden eval set.
 
 trust_remote_code: true     # EarthDial ships InternVL custom modelling code
+
+attn_implementation: sdpa   # NOT eager. flash-attn is not installed here, and the default
+                            # fallback is eager, which materialises the full
+                            # (heads, seq, seq) attention matrix in float32. At max_tiles 6
+                            # that is ~1,800 image tokens and one layer's softmax asks for
+                            # 436 MB -- measured as a CUDA OOM inside Phi-3's softmax on
+                            # this 8 GB card with roughly 3 GB free.
+                            #
+                            # SDPA computes the same thing without holding that matrix. The
+                            # model ships the implementation and it was simply never
+                            # requested. A 1600x900 image now captions at 4.6 GB peak where
+                            # it previously OOM'd.
+                            #
+                            # Note this is an inference-time attention kernel, not a change
+                            # to what the model sees: max_tiles stays 6 and train/eval
+                            # parity is untouched. Lowering max_tiles would have fixed the
+                            # OOM too, and would have broken that parity.
 adapter_path: train/lora_stage1/adapter   # relative to $SATQUERY_ARTIFACT_ROOT
                             # THE shipped adapter, and it is now the step-2000 save: the
                             # 2,000-step run wrote here on completion, replacing the

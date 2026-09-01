@@ -175,6 +175,9 @@ class BackboneConfig:
     revision: str | None = None
     dtype: str = "bfloat16"
     device_map: str = "auto"
+    attn_implementation: str = "sdpa"
+    """`sdpa`, `eager`, or `flash_attention_2`. See the note where this is used: eager
+    materialises the whole attention matrix and OOMs on a long visual sequence."""
     load_in_4bit: bool = False
     image_size: int = 448
     max_tiles: int = 6
@@ -493,6 +496,19 @@ class EarthDialBackbone:
             dtype_kwarg: dtype,
             "low_cpu_mem_usage": True,
             "trust_remote_code": self.config.trust_remote_code,
+            # Scaled dot-product attention, not the eager path.
+            #
+            # flash-attn is not installed here, and without this the model falls back to
+            # eager, which materialises the full (heads, seq, seq) attention matrix in
+            # float32. At 6 tiles plus a thumbnail that is ~1,800 image tokens, and a
+            # single layer's softmax asks for 436 MB. Measured: an OOM on an 8 GB card
+            # with 3 GB free, inside Phi-3's softmax.
+            #
+            # SDPA computes the same result without ever holding that matrix. The model
+            # ships the implementation (PHI3_ATTENTION_CLASSES), it was simply never
+            # requested. Falls back to eager below if this build refuses it, because a
+            # slower model that runs beats a faster one that OOMs.
+            "attn_implementation": self.config.attn_implementation,
         }
 
         if self.config.load_in_4bit:
@@ -513,7 +529,17 @@ class EarthDialBackbone:
             self.config.dtype,
             self.config.load_in_4bit,
         )
-        self._model = AutoModel.from_pretrained(str(local_dir), **kwargs).eval()
+        try:
+            self._model = AutoModel.from_pretrained(str(local_dir), **kwargs).eval()
+        except (ValueError, TypeError) as exc:
+            # Some remote-code builds reject the argument outright rather than ignoring it.
+            _LOG.warning(
+                "attn_implementation=%s refused (%s); falling back to the build default",
+                kwargs.get("attn_implementation"),
+                exc,
+            )
+            kwargs.pop("attn_implementation", None)
+            self._model = AutoModel.from_pretrained(str(local_dir), **kwargs).eval()
         self._tokenizer = AutoTokenizer.from_pretrained(
             str(local_dir), trust_remote_code=self.config.trust_remote_code, use_fast=False
         )
