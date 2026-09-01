@@ -160,6 +160,9 @@ export const api = {
     return fetch('/api/images', { method: 'POST', body: form }).then(unwrap<UploadedImage>)
   },
 
+  /** Ingest the bundled demo scene. 404s when none is installed, which is not an error. */
+  demo: () => fetch('/api/images/demo', { method: 'POST' }).then(unwrap<UploadedImage[]>),
+
   submit: (query: string, imageIds: string[]) =>
     fetch('/api/query', {
       method: 'POST',

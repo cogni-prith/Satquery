@@ -13,6 +13,18 @@ import { humanise } from '../lib/answers'
  * presentation, not interpretation: it never substitutes a different answer.
  */
 
+/**
+ * Drop the verbalizer's trailing warning tally.
+ *
+ * The templates append "(2 warning(s) recorded.)" so the count survives in a plain-text
+ * answer. Here the caveats have their own panel with the full text, so the tally is both
+ * redundant and misleading -- its count reads as a measurement and gets highlighted like
+ * one. Removed from the display only; the answer string itself is untouched.
+ */
+function stripWarningTally(text: string) {
+  return text.replace(/\s*\(\d+\s*warning\(s\)\s*recorded\.\)\s*$/, '').trim()
+}
+
 /** Wrap every number so CSS can style it, without touching the words around it. */
 function highlight(text: string) {
   const parts = text.split(/(\d[\d,]*\.?\d*\s*(?:%|m²|km²|ha|m2)?)/g)
@@ -57,7 +69,7 @@ export function AnswerCard({ result }: { result: ToolResult }) {
   return (
     <div className="answer-card">
       <div className="answer-body">
-        <div className="answer-text">{highlight(humanise(result.answer) ?? '')}</div>
+        <div className="answer-text">{highlight(stripWarningTally(humanise(result.answer) ?? ''))}</div>
         {result.confidence != null && <ConfidenceRing value={result.confidence} />}
       </div>
       <div className="answer-foot">
