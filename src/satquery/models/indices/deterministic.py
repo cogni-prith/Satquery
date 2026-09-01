@@ -20,6 +20,7 @@ from __future__ import annotations
 import numpy as np
 
 from satquery.models.base import BaseTool, infer_input_config_from_images
+from satquery.models.indices.render import render_change_map, render_mask_overlay, write_png
 from satquery.preprocess.constants import SAR_WATER_DB_THRESHOLD
 from satquery.serve.contracts import Evidence, InputConfig, Modality, ToolRequest, ToolResult
 from satquery.symbolic.record import build_record
@@ -188,18 +189,70 @@ class DeterministicIndexTool(BaseTool):
 
         record = build_record(intent, outputs, gsd_m)
         answer = verbalize(record)
+        evidence = self._render_evidence(request, outputs)
 
         return ToolResult(
             request_id=request.request_id,
             tool_name=self.spec.name,
             tool_version=self.spec.version,
             answer=answer,
-            evidence=Evidence(),
+            evidence=evidence,
             confidence=self._confidence(record),
             params_used={"indices": which, "classes": sorted(wanted)},
             warnings=record.warnings,
             answer_record=record.model_dump(mode="json"),
         )
+
+    # -- evidence ---------------------------------------------------------------------
+
+    def _render_evidence(self, request: ToolRequest, outputs: dict) -> Evidence:
+        """Write the maps behind the answer, so the number can be checked against pixels.
+
+        Rendering failures are swallowed deliberately: a missing picture must never turn a
+        correct measurement into a failed request. The answer stands on the record, and
+        the maps are corroboration.
+        """
+        from satquery.models.base import load_model_input
+        from satquery.utils.paths import artifact_dir
+
+        evidence = Evidence()
+        try:
+            out = artifact_dir("serve", "evidence")
+            stem = request.request_id[:12]
+            base, _ = load_model_input(request.images[0])
+
+            if "masks" in outputs:
+                evidence.overlay_path = write_png(
+                    out / f"{stem}_overlay.png",
+                    render_mask_overlay(base, outputs["masks"]),
+                )
+            elif "masks_t1" in outputs:
+                shared = sorted(set(outputs["masks_t1"]) & set(outputs["masks_t2"]))
+                if shared:
+                    name = shared[0]
+                    evidence.mask_path = write_png(
+                        out / f"{stem}_change.png",
+                        render_change_map(
+                            base, outputs["masks_t1"][name], outputs["masks_t2"][name]
+                        ),
+                    )
+                    evidence.index_maps = {
+                        f"{name}_t1": write_png(
+                            out / f"{stem}_t1.png",
+                            render_mask_overlay(base, {name: outputs["masks_t1"][name]}),
+                        ),
+                        f"{name}_t2": write_png(
+                            out / f"{stem}_t2.png",
+                            render_mask_overlay(
+                                load_model_input(request.images[1])[0],
+                                {name: outputs["masks_t2"][name]},
+                            ),
+                        ),
+                    }
+        except Exception as exc:  # a missing map must not fail a good answer
+            _LOG.warning("evidence rendering failed, answer is unaffected: %s", exc)
+
+        return evidence
 
     # -- helpers ----------------------------------------------------------------------
 
