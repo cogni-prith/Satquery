@@ -261,6 +261,23 @@ export default function App() {
               <div className="note note-err"><IconWarn /><div>{error}</div></div>
             )}
 
+            {/* A refused query returns a completed job with an error and no result, so it
+                cannot live inside the result panel -- gating that panel on `result` is
+                exactly how a refusal became silence. It gets its own block, above the
+                fold, because "why did nothing happen" is the question it answers. */}
+            {!busy && jobError && !result && (
+              <section className="panel refusal">
+                <header className="panel-head">
+                  <h2>Cannot answer this</h2>
+                  <span className="chip">no tool ran</span>
+                </header>
+                <div className="panel-body refusal-body">
+                  <IconWarn />
+                  <p>{jobError}</p>
+                </div>
+              </section>
+            )}
+
             {/* ── result ────────────────────────────────────────────────────── */}
             {(busy || result) && (
               <section className="panel accent">

@@ -987,3 +987,16 @@ kbd { font-family: var(--mono); font-size: 9.5px; padding: 1px 4px; border-radiu
   background: #ff3e4e; box-shadow: 0 0 9px rgba(255,62,78,0.85);
 }
 .ghost-btn.on { border-color: var(--accent); color: var(--ink); background: rgba(91,140,255,0.18); }
+
+/* ── refusal ────────────────────────────────────────────────────────────────── */
+/* A refusal is an answer. It gets a full panel rather than a toast, because the thing it
+   has to explain -- which band is missing, what to upload instead -- is longer than a
+   line and is the only actionable text on the screen. */
+.panel.refusal { border-color: rgba(251, 191, 36, 0.32); }
+.panel.refusal .panel-head h2 { color: var(--warn); }
+.refusal-body { display: flex; gap: 13px; align-items: flex-start; }
+.refusal-body svg { width: 19px; height: 19px; color: var(--warn); flex: none; margin-top: 1px; }
+.refusal-body p { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); max-width: 82ch; }
+
+.dstatus.refused { color: var(--warn); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.07); }
+.dstatus.refused .dpulse { background: var(--warn); }

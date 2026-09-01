@@ -117,9 +117,18 @@ export function DecisionPanel({
           </span>
         </div>
       ))}
-      <div className={`dstatus ${busy ? 'busy' : ''}`}>
+      {/* A trace with no tool chosen means the gate refused: that is a decision, not an
+          idle state, and reporting it as "awaiting a query" is how the interface came to
+          look like it had simply ignored the request. */}
+      <div className={`dstatus ${busy ? 'busy' : !chosen && trace ? 'refused' : ''}`}>
         <span className="dpulse" />
-        {busy ? 'Routing and measuring…' : chosen ? 'Completed' : 'Awaiting a query'}
+        {busy
+          ? 'Routing and measuring…'
+          : chosen
+            ? 'Completed'
+            : trace
+              ? 'Refused — no tool accepts this input'
+              : 'Awaiting a query'}
       </div>
     </div>
   )
