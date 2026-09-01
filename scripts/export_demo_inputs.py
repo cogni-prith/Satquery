@@ -98,6 +98,29 @@ def write_quicklook(path: Path, stack: np.ndarray) -> Path:
     return path
 
 
+def write_tif(path: Path, stack: np.ndarray) -> Path:
+    """Write one patch as a GeoTIFF with named bands. Shared with find_change_pairs.py."""
+    import rasterio
+    from rasterio.transform import from_origin
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=stack.shape[1],
+        width=stack.shape[2],
+        count=len(BANDS),
+        dtype="float32",
+        crs=CRS,
+        transform=from_origin(*NOMINAL_ORIGIN, GSD_M, GSD_M),
+    ) as dst:
+        for index, name in enumerate(BANDS, start=1):
+            dst.write(stack[index - 1], index)
+            dst.set_band_description(index, name)
+    return path
+
+
 def main() -> int:
     if not (LMDB / "data.mdb").exists():
         print(f"reBEN LMDB not found at {LMDB}.", file=sys.stderr)
