@@ -23,10 +23,16 @@ function kpisFor(record: AnswerRecord, result: ToolResult): Kpi[] {
 
   if (deltas.length > 0) {
     const [name, delta] = deltas[0]
-    const [value, unit] = fmtArea(Math.abs(delta.absolute_m2))
+    // No transform means no ground area. Show the change in share of the scene rather
+    // than a hectare figure the imagery cannot support.
+    const signed = delta.absolute_m2 ?? ((delta.fraction_t2 ?? 0) - (delta.fraction_t1 ?? 0))
+    const [value, unit] =
+      delta.absolute_m2 != null
+        ? fmtArea(Math.abs(delta.absolute_m2))
+        : [(Math.abs(signed) * 100).toFixed(1), 'pp of scene']
     cards.push({
       label: `${name.replace(/_/g, ' ')} change`,
-      value: `${delta.absolute_m2 >= 0 ? '+' : '−'}${value}`,
+      value: `${signed >= 0 ? '+' : '−'}${value}`,
       unit,
       tone: delta.trend === 'increased' ? 'up' : delta.trend === 'decreased' ? 'down' : 'flat',
       icon: IconChange,

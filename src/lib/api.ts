@@ -50,10 +50,17 @@ export type Fact = {
   confidence: number | null
 }
 
+/**
+ * The `_m2` fields are null when the imagery carried no affine transform: a pixel count
+ * cannot be converted to ground area without a scale. `relative` and `trend` survive,
+ * because a ratio of pixel counts needs none.
+ */
 export type AreaDelta = {
-  area_t1_m2: number
-  area_t2_m2: number
-  absolute_m2: number
+  area_t1_m2: number | null
+  area_t2_m2: number | null
+  absolute_m2: number | null
+  fraction_t1: number | null
+  fraction_t2: number | null
   relative: number
   trend: 'increased' | 'decreased' | 'unchanged'
 }

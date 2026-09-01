@@ -62,10 +62,15 @@ function Deltas({ record }: { record: AnswerRecord }) {
   return (
     <>
       {entries.map(([name, delta], index) => {
-        const peak = Math.max(delta.area_t1_m2, delta.area_t2_m2, 1)
+        // Without a ground scale the bars show share of the scene instead of hectares.
+        // Same shape, weaker claim, and the unit on the row says which one you are reading.
+        const scaled = delta.absolute_m2 != null
+        const t1 = scaled ? (delta.area_t1_m2 ?? 0) : (delta.fraction_t1 ?? 0)
+        const t2 = scaled ? (delta.area_t2_m2 ?? 0) : (delta.fraction_t2 ?? 0)
+        const peak = Math.max(t1, t2, scaled ? 1 : 0.0001)
         const rows: [string, number][] = [
-          ['T1', delta.area_t1_m2],
-          ['T2', delta.area_t2_m2],
+          ['T1', t1],
+          ['T2', t2],
         ]
         return (
           <div className="delta" key={name} style={{ animationDelay: `${index * 70}ms` }}>
@@ -78,7 +83,7 @@ function Deltas({ record }: { record: AnswerRecord }) {
             </div>
             <div className="delta-bars">
               {rows.map(([label, area]) => {
-                const { text, unit } = formatValue(area, 'm2')
+                const { text, unit } = formatValue(area, scaled ? 'm2' : 'fraction')
                 return (
                   <div className="dbar" key={label}>
                     <span className="t">{label}</span>
