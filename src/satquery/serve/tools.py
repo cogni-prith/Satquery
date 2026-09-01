@@ -53,7 +53,7 @@ def _bind_landcover() -> None:
     weights = artifact_root() / "train" / "landcover" / "final"
     if not weights.is_dir():
         _LOG.info("no segmenter at %s; seg.landcover unregistered", weights)
-        _drop("seg.landcover")
+        _drop("seg.landcover", "change.mask")
         return
 
     segmenter = LandCoverSegmenter()
@@ -61,14 +61,23 @@ def _bind_landcover() -> None:
         segmenter.load(weights)
     except Exception as exc:  # a broken checkpoint must not take the service down
         _LOG.warning("segmenter at %s did not load: %s", weights, exc)
-        _drop("seg.landcover")
+        _drop("seg.landcover", "change.mask")
         return
 
-    REGISTRY.bind(
-        "seg.landcover",
-        lambda: LandCoverTool(REGISTRY.get_spec("seg.landcover"), segmenter),
-    )
+    landcover = LandCoverTool(REGISTRY.get_spec("seg.landcover"), segmenter)
+    REGISTRY.bind("seg.landcover", lambda: landcover)
     _LOG.info("bound seg.landcover")
+
+    # change.mask is composed from the same segmenter rather than separately trained:
+    # SECOND's per-pixel change labels are not on this machine, and the transition
+    # between two segmented dates is the same quantity a change network predicts.
+    from satquery.models.change.semantic_tool import SemanticChangeTool
+
+    REGISTRY.bind(
+        "change.mask",
+        lambda: SemanticChangeTool(REGISTRY.get_spec("change.mask"), landcover),
+    )
+    _LOG.info("bound change.mask (composed from seg.landcover)")
 
 
 def _bind_vlm() -> None:
@@ -152,7 +161,52 @@ def _bind_fusion() -> None:
     _LOG.info("bound fusion.extraction")
 
 
+def _bind_detector() -> None:
+    """Bind the detector fine-tuned on VRSBench boxes, if its checkpoint is on disk."""
+    import torch
+    import torchvision
+    from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+
+    from satquery.models.detection.tool import ObjectDetectorTool
+    from satquery.utils.paths import artifact_root
+
+    checkpoint = artifact_root() / "train" / "detector" / "model.pt"
+    if not checkpoint.is_file():
+        _LOG.info("no detector at %s; detector.openvocab unregistered", checkpoint)
+        _drop("detector.openvocab")
+        return
+
+    try:
+        payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        vocabulary = [str(v) for v in payload["vocabulary"]]
+        model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=None)
+        features = model.roi_heads.box_predictor.cls_score.in_features
+        model.roi_heads.box_predictor = FastRCNNPredictor(features, len(vocabulary) + 1)
+        missing, _ = model.load_state_dict(payload["state_dict"], strict=False)
+        if missing:
+            raise RuntimeError(f"checkpoint missing {len(missing)} tensors: {missing[:3]}")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model.to(device).eval()
+    except Exception as exc:
+        _LOG.warning("detector at %s did not load: %s", checkpoint, exc)
+        _drop("detector.openvocab")
+        return
+
+    REGISTRY.bind(
+        "detector.openvocab",
+        lambda: ObjectDetectorTool(
+            REGISTRY.get_spec("detector.openvocab"),
+            model,
+            vocabulary,
+            device,
+            int(payload.get("image_size", 384)),
+        ),
+    )
+    _LOG.info("bound detector.openvocab over %d classes", len(vocabulary))
+
+
 _bind_landcover()
+_bind_detector()
 _bind_change_vqa()
 _bind_fusion()
 

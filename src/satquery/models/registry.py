@@ -159,11 +159,17 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         },
         returns=["evidence.boxes", "evidence.overlay_path", "confidence"],
         description=(
-            "Open-vocabulary detector. The router prefers this over vlm.grounding when the "
-            "query names a concrete object class rather than a spatial relation."
+            "Object detection with counts measured by the symbolic layer. CLOSED "
+            "vocabulary despite the tool's name: fine-tuned on VRSBench's 26 fixed "
+            "classes (vehicle, ship, airplane, bridge, storage-tank and 21 more), so it "
+            "cannot find anything outside them. Open-vocabulary detection needs a "
+            "text-conditioned model and labels this dataset does not provide. Measured at "
+            "IoU 0.5: recall 0.644, precision 0.593 -- and that precision is a floor, "
+            "because VRSBench annotates one object per referring expression and a correct "
+            "detection of an unlabelled object scores as a false positive."
         ),
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="vlm.change_description",
@@ -224,7 +230,7 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         returns=["evidence.mask_path", "evidence.overlay_path", "confidence"],
         description="Pixel-level binary change mask. Optional per the problem statement.",
         requires_gpu=True,
-        implemented=False,
+        implemented=True,
     ),
     ToolSpec(
         name="fusion.extraction",
@@ -253,8 +259,12 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
             "confidence",
         ],
         description=(
-            "Joint built-up and water extraction from a co-registered optical and SAR pair, "
-            "using the learned dual encoder cross-checked against the deterministic indices."
+            "Per-pixel semantic change between two dates: which class became which, not "
+            "merely that something changed. Composed by running the trained land-cover "
+            "segmenter on each date rather than by a separately trained change network -- "
+            "SECOND's per-pixel change labels are not available here. Its errors are the "
+            "segmenter's measured errors; it cannot exploit correlations between the two "
+            "dates the way a Siamese model would."
         ),
         requires_gpu=True,
         implemented=True,
