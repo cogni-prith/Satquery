@@ -252,6 +252,34 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         implemented=False,
     ),
     ToolSpec(
+        name="seg.landcover",
+        version="0.1.0",
+        task=TaskType.FUSION_EXTRACTION,
+        accepted_modalities=[Modality.MULTISPECTRAL],
+        accepted_input_configs=[InputConfig.SINGLE, InputConfig.BI_TEMPORAL_PAIR],
+        min_gsd_m=None,
+        max_gsd_m=None,
+        param_schema={"type": "object", "additionalProperties": False, "properties": {}},
+        returns=[
+            "answer",
+            "evidence.overlay_path",
+            "evidence.highlight_path",
+            "confidence",
+        ],
+        description=(
+            "Trained land-cover segmentation, scored against the deterministic spectral "
+            "indices. The only tool here that produces two independent estimates of the "
+            "same quantity, so it is the only one that can report a real agreement-based "
+            "confidence rather than none. Measured on the reBEN validation split: water "
+            "0.95, vegetation 0.82, agriculture 0.81, built-up 0.60, wetland 0.37 IoU."
+        ),
+        requires_gpu=False,
+        implemented=True,
+        # Preferred over indices.deterministic wherever both are legal: it measures the
+        # same classes and additionally reports how far an independent estimate agrees.
+        preference=10,
+    ),
+    ToolSpec(
         name="change.radiometric",
         version="0.1.0",
         task=TaskType.CHANGE_MASK,

@@ -465,6 +465,14 @@ class ToolSpec(BaseModel):
         default="", description="One line for the router's stage-two constrained classifier."
     )
     requires_gpu: bool = Field(default=True)
+    preference: int = Field(
+        default=0,
+        description=(
+            "Tie-break among tools the gate finds equally legal, highest first. Exists so "
+            "the choice between a learned tool and its deterministic fallback is a stated "
+            "decision rather than an accident of alphabetical ordering."
+        ),
+    )
     implemented: bool = Field(
         default=False,
         description=(

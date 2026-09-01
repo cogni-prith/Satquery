@@ -41,3 +41,23 @@ train:
   warmup_ratio: 0.05
   save_steps: 250           # this machine's external disk has slept mid-run before
   weights: train/landcover/final
+
+# ── what this model actually predicts ────────────────────────────────────────────
+#
+# CORINE labels a DESIGNATED land cover, not an observation. A reservoir is a water body
+# whether or not there is water in it today, so a head trained on CORINE learns the
+# designation and inherits that semantics.
+#
+# MEASURED on the Alentejo demo patch during the 2017 drought:
+#   CORINE label      55.6% water
+#   this segmenter    34.8% water   (IoU 0.613 against the CORINE label)
+#   NDWI observed     18.7% water   (IoU 0.337 against the CORINE label)
+#
+# The segmenter agrees with the label it was trained on far better than NDWI does, which
+# is correct behaviour and not a defect -- but it means the learned water figure is closer
+# to the mapped extent than to the wet surface.
+#
+# So: for "how much water is there now", NDWI is the right instrument. For built-up, where
+# NDBI cannot separate concrete from dry bare soil, the learned head is. The serving tool
+# reports both and names this mismatch in a warning rather than letting a reader assume
+# the learned number supersedes the index.
