@@ -233,6 +233,20 @@ export default function App() {
                         (result?.evidence.boxes ?? []).filter((box) => box.image_index === index)
                       }
                       highlight={result?.evidence.highlight_path?.split('/').pop() ?? null}
+                      gainedLost={(() => {
+                        const klass = result?.params_used?.highlighted_class as string | undefined
+                        if (!klass) return null
+                        const t = result?.answer_record?.change_transitions ?? {}
+                        // Absent when the imagery carried no scale: the split is real but
+                        // has no ground area, so the legend shows the colours without figures.
+                        const gained = t[`to_${klass}`]
+                        const lost = t[`from_${klass}`]
+                        return {
+                          klass,
+                          gained: typeof gained === 'number' ? gained : null,
+                          lost: typeof lost === 'number' ? lost : null,
+                        }
+                      })()}
                       onRemove={(id) => setImages((current) => current.filter((item) => item.image_id !== id))}
                       onSwap={() => setImages((current) => [current[1], current[0]])}
                     />

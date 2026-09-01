@@ -1006,3 +1006,10 @@ kbd { font-family: var(--mono); font-size: 9.5px; padding: 1px 4px; border-radiu
 
 .dstatus.refused { color: var(--warn); border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.07); }
 .dstatus.refused .dpulse { background: var(--warn); }
+.frame-legend .key.klass {
+  font-weight: 700; color: var(--ink); letter-spacing: 0.08em;
+  padding-right: 10px; border-right: 1px solid var(--line-bright);
+}
+/* A zero stays legible but recedes: it is a real finding, not a live category. */
+.frame-legend .key.nil { opacity: 0.55; }
+.frame-legend .key.nil .sw { box-shadow: none; opacity: 0.6; }

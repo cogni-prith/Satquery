@@ -11,11 +11,21 @@ import { IconSwap, IconTarget, IconX } from './Icons'
  * screen, one date wiped over the other. Two images in two boxes forces the viewer to
  * do the registration in their head, which is exactly the work the tool exists to do.
  */
+/** Compact area for the legend. Returns an empty string when no scale was available. */
+function fmtArea(m2: number | null | undefined): string {
+  if (m2 == null) return ''
+  if (m2 === 0) return ' 0'
+  if (Math.abs(m2) >= 1_000_000) return ` ${(m2 / 1_000_000).toFixed(2)} km²`
+  if (Math.abs(m2) >= 10_000) return ` ${(m2 / 10_000).toFixed(1)} ha`
+  return ` ${Math.round(m2).toLocaleString()} m²`
+}
+
 export function Canvas({
   images,
   roles,
   boxesFor,
   highlight,
+  gainedLost,
   onRemove,
   onSwap,
 }: {
@@ -24,6 +34,8 @@ export function Canvas({
   boxesFor: (index: number) => BoundingBox[]
   /** Filename of the transparent layer marking the pixels the answer is about. */
   highlight: string | null
+  /** Ground area gained and lost for the highlighted class, in m2, when the GSD is known. */
+  gainedLost: { klass: string; gained: number | null; lost: number | null } | null
   onRemove: (id: string) => void
   onSwap: () => void
 }) {
@@ -133,8 +145,14 @@ export function Canvas({
           <div className="frame-legend">
             {pair ? (
               <>
-                <span className="key"><i className="sw gained" /> gained</span>
-                <span className="key"><i className="sw lost" /> lost</span>
+                {gainedLost?.klass && <span className="key klass">{gainedLost.klass.replace(/_/g, ' ')}</span>}
+                <span className="key"><i className="sw gained" /> gained{fmtArea(gainedLost?.gained)}</span>
+                {/* The zero is printed rather than the row hidden. A scene where nothing
+                    was lost is a finding; a legend that quietly drops the category looks
+                    like the overlay failed to draw it. */}
+                <span className={`key ${gainedLost?.lost === 0 ? 'nil' : ''}`}>
+                  <i className="sw lost" /> lost{fmtArea(gainedLost?.lost)}
+                </span>
                 <span className="key"><i className="sw rim" /> extent at date 1</span>
               </>
             ) : (
