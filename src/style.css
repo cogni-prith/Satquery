@@ -75,7 +75,14 @@ body {
   background: var(--bg-0);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow: hidden;
+  /* The document scrolls. An earlier version pinned the body and scrolled an inner
+     column, which meant a two-finger swipe over the sidebar, the command bar or the
+     status strip did nothing at all -- the page felt stuck unless the pointer happened
+     to be over the middle third. Chrome is sticky instead, which keeps it on screen
+     without capturing the scroll. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: none;
 }
 
 button, input, textarea, select { font: inherit; color: inherit; }
@@ -486,15 +493,29 @@ button { cursor: pointer; border: none; background: none; }
  * on screen while a judge reads a result. Panels are the unit of composition; the page is
  * a sequence of them in the order the system actually works.
  */
-.app { position: relative; z-index: 1; height: 100%; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
-.main { display: grid; grid-template-rows: 60px minmax(0, 1fr) 30px; min-width: 0; }
-.scroll { overflow-y: auto; min-height: 0; padding: 18px 22px 8px; display: flex; flex-direction: column; gap: 18px; }
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  align-items: start;
+}
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; }
+/* No overflow here: the page scrolls, so this is just a column of panels. */
+.scroll { flex: 1; padding: 18px 22px 8px; display: flex; flex-direction: column; gap: 18px; }
 
 /* ── sidebar ────────────────────────────────────────────────────────────────── */
 .side {
   border-right: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(12,17,28,0.96), rgba(8,11,19,0.96));
+  /* Sticky, not independently scrollable: a rail with its own scrollbar swallows the
+     wheel when the pointer strays into it. It scrolls with the page and stops. */
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -603,8 +624,13 @@ button { cursor: pointer; border: none; background: none; }
 .bar {
   display: flex; align-items: center; gap: 16px;
   padding: 0 20px;
+  height: 60px;
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   border-bottom: 1px solid var(--line);
-  background: rgba(8,11,19,0.86); backdrop-filter: blur(18px);
+  background: rgba(8,11,19,0.92); backdrop-filter: blur(18px);
 }
 .command {
   display: flex; align-items: center; gap: 10px;
@@ -906,8 +932,14 @@ button { cursor: pointer; border: none; background: none; }
 /* ── status strip ───────────────────────────────────────────────────────────── */
 .strip {
   display: flex; align-items: center; justify-content: space-between; gap: 20px;
-  padding: 0 18px; border-top: 1px solid var(--line);
-  background: rgba(8,11,19,0.92); font-size: 10.5px; overflow: hidden;
+  padding: 0 18px; height: 30px;
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  border-top: 1px solid var(--line);
+  background: rgba(8,11,19,0.95); backdrop-filter: blur(12px);
+  font-size: 10.5px; overflow: hidden;
 }
 .strip-group { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .strip-group.right { flex: none; }
