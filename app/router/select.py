@@ -34,6 +34,30 @@ _SIGNALS: dict[TaskType, tuple[str, ...]] = {
 }
 
 
+def vocabulary_match(spec: ToolSpec, query: str) -> int:
+    """Adjust a closed-vocabulary tool by whether the query names something it can find.
+
+    Two tools can serve the same task while one of them structurally cannot answer. The
+    detector and the VLM both do grounding, but the detector knows 26 fixed classes and
+    the VLM takes arbitrary text. Asked "where is the highway?" they scored identically,
+    the tie broke on registry order, and the detector won and reported nothing found --
+    a true statement that read as "there is no highway" when the real answer was "I do not
+    know that word".
+
+    A tool declaring no vocabulary is open-ended and unaffected. One that declares a
+    vocabulary is boosted when the query names a term in it and penalised when it does
+    not, so an open-ended sibling takes the query instead.
+    """
+    if not spec.vocabulary:
+        return 0
+    text = query.lower()
+    for name in spec.vocabulary:
+        spaced = name.replace("-", " ")
+        if spaced in text or name in text or f"{spaced}s" in text:
+            return 4
+    return -4
+
+
 def score(spec: ToolSpec, query: str) -> int:
     """How well one candidate matches the query. Higher wins; zero means no signal.
 
@@ -44,7 +68,7 @@ def score(spec: ToolSpec, query: str) -> int:
     text = query.lower()
     ordinary = sum(1 for term in _SIGNALS.get(spec.task, ()) if term in text)
     strong = sum(3 for term in _STRONG.get(spec.task, ()) if term in text)
-    return ordinary + strong
+    return ordinary + strong + vocabulary_match(spec, query)
 
 
 def select(candidates: list[ToolSpec], query: str) -> tuple[ToolSpec, str]:
