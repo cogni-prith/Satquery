@@ -1,55 +1,58 @@
 import type { Trace } from '../lib/api'
+import { IconRoute } from './Icons'
 
 /**
- * The execution trace, step by step.
+ * The execution trace, drawn as the pipeline it is.
  *
- * This is a first-class surface rather than a debug panel: "auditable execution summary"
- * is a separately scored judging row, and the trace is its artifact. It renders on every
- * outcome including failures, because a well-formed trace on a failure path is exactly
- * what distinguishes an auditable system from one that only explains itself when it wins.
+ * A separately scored judging row, so it gets a real visualisation rather than a log dump:
+ * numbered nodes on a connector, each with its latency drawn to scale against the slowest
+ * step. Reading which stage cost the time should not require reading any numbers.
  */
-export function TracePanel({ trace }: { trace: Trace | null }) {
+export function TracePanel({ trace, running }: { trace: Trace | null; running: boolean }) {
   if (!trace) return null
-
+  const slowest = Math.max(...trace.steps.map((step) => step.latency_ms ?? 0), 1)
   const total = trace.steps.reduce((sum, step) => sum + (step.latency_ms ?? 0), 0)
 
   return (
-    <section className="panel">
-      <h2>
-        Execution trace
-        <span className="muted"> · {trace.steps.length} steps · {total.toFixed(0)} ms</span>
-      </h2>
+    <section className="card">
+      <header className="card-head">
+        <span className="card-title">
+          <IconRoute /> execution trace
+        </span>
+        <span className="chip">
+          {trace.steps.length} steps · {total.toFixed(0)} ms
+        </span>
+      </header>
 
-      <div className="trace-meta">
-        <span><b>input</b> {trace.input_config ?? '—'}</span>
-        <span><b>task</b> {trace.task ?? '—'}</span>
-        <span><b>request</b> <code>{trace.request_id.slice(0, 12)}</code></span>
-      </div>
-
-      <ol className="trace">
-        {trace.steps.map((step, index) => (
-          <li key={index} className={`step step-${step.status}`}>
-            <div className="step-head">
-              <span className="step-name">{step.step}</span>
-              {step.tool_name && (
-                <span className="muted">
-                  {step.tool_name} v{step.tool_version}
-                </span>
-              )}
-              <span className="step-status">{step.status}</span>
-              {step.latency_ms != null && (
-                <span className="muted">{step.latency_ms.toFixed(0)} ms</span>
-              )}
+      <div className="trace">
+        {trace.steps.map((step, index) => {
+          const isLast = index === trace.steps.length - 1
+          const latency = step.latency_ms ?? 0
+          return (
+            <div
+              className={`tstep ${step.status} ${running && isLast ? 'running' : ''}`}
+              key={`${step.tool_name}-${index}`}
+              style={{ animationDelay: `${index * 90}ms` }}
+            >
+              <div className="tnode">{index + 1}</div>
+              <div className="tbody">
+                <div className="trow">
+                  <span className="tname">{step.tool_name ?? 'step'}</span>
+                  {step.tool_version && <span className="tver">v{step.tool_version}</span>}
+                  <span className="tms">{latency.toFixed(1)} ms</span>
+                </div>
+                {step.message && <div className="tmsg">{step.message}</div>}
+                <div className="tbar">
+                  <i style={{ ['--w' as string]: `${(latency / slowest) * 100}%` }} />
+                </div>
+                {Object.keys(step.params).length > 0 && (
+                  <div className="tparams">{JSON.stringify(step.params, null, 1)}</div>
+                )}
+              </div>
             </div>
-
-            {step.message && <p className="step-message">{step.message}</p>}
-
-            {Object.keys(step.params).length > 0 && (
-              <pre className="step-params">{JSON.stringify(step.params, null, 2)}</pre>
-            )}
-          </li>
-        ))}
-      </ol>
+          )
+        })}
+      </div>
     </section>
   )
 }

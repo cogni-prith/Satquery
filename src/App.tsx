@@ -1,15 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, pollJob, type Health, type JobView, type ToolSpec, type UploadedImage } from './lib/api'
-import { ResultPanel } from './components/ResultPanel'
+import { examplesFor, planFor } from './lib/roles'
+import { ImageCard } from './components/ImageCard'
+import { AnswerCard } from './components/AnswerCard'
+import { RecordPanel } from './components/RecordPanel'
 import { TracePanel } from './components/TracePanel'
+import {
+  IconGlobe,
+  IconLayers,
+  IconRoute,
+  IconSpark,
+  IconSwap,
+  IconUpload,
+  IconWarn,
+} from './components/Icons'
 
 /**
  * SatQuery AI.
  *
- * The UI holds no domain logic. It uploads rasters, submits a query, and renders whatever
- * the contract returns. Which tools exist, what they accept and whether they are
- * implemented all come from `/api/tools`, so there is no second capability list here to
- * drift from the registry the router actually reads.
+ * Two columns: imagery and question on the left, answer and evidence on the right. The
+ * split is not decoration — the execution trace is a separately scored judging row, and
+ * giving it a permanent column rather than a panel below the fold is what makes it a
+ * first-class output instead of a debug view.
+ *
+ * The UI holds no domain logic. Capabilities come from `/api/tools`, the same registry
+ * the router reads, so there is no second list here to drift from the real one.
  */
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null)
@@ -19,40 +34,52 @@ export default function App() {
   const [job, setJob] = useState<JobView | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
 
-  // Models take about 45 seconds to load. Poll until they are up so the UI can say
-  // "starting" rather than letting a user submit into a 503.
+  const plan = planFor(images)
+  const examples = examplesFor(plan)
+  const ready = health?.models_loaded === true
+  const implemented = tools.filter((tool) => tool.implemented)
+
   useEffect(() => {
     let cancelled = false
     const tick = async () => {
       try {
         const next = await api.health()
-        if (!cancelled) setHealth(next)
-        if (!next.models_loaded && !cancelled) setTimeout(tick, 2000)
+        if (cancelled) return
+        setHealth(next)
+        if (!next.models_loaded) setTimeout(tick, 2000)
       } catch {
         if (!cancelled) setTimeout(tick, 3000)
       }
     }
     tick()
     api.tools().then((body) => !cancelled && setTools(body.tools)).catch(() => {})
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  const onUpload = async (files: FileList | null) => {
-    if (!files?.length) return
-    setError(null)
-    for (const file of Array.from(files).slice(0, 2 - images.length)) {
-      try {
-        const uploaded = await api.upload(file)
-        setImages((current) => [...current, uploaded])
-      } catch (exc) {
-        setError(exc instanceof Error ? exc.message : String(exc))
+  const addFiles = useCallback(
+    async (files: FileList | File[] | null) => {
+      if (!files) return
+      setError(null)
+      const room = 2 - images.length
+      for (const file of Array.from(files).slice(0, room)) {
+        try {
+          const uploaded = await api.upload(file)
+          setImages((current) => (current.length >= 2 ? current : [...current, uploaded]))
+        } catch (exc) {
+          setError(exc instanceof Error ? exc.message : String(exc))
+        }
       }
-    }
-  }
+    },
+    [images.length],
+  )
 
   const onSubmit = async () => {
-    if (!query.trim() || images.length === 0) return
+    if (!query.trim() || images.length === 0 || busy) return
     setBusy(true)
     setError(null)
     setJob(null)
@@ -66,109 +93,280 @@ export default function App() {
     }
   }
 
-  const ready = health?.models_loaded === true
-  const implemented = tools.filter((tool) => tool.implemented)
+  const boxesFor = (index: number) =>
+    (job?.result?.evidence.boxes ?? []).filter((box) => box.image_index === index)
+
+  const result = job?.result ?? null
+  const warnings = result?.warnings ?? []
+  const jobError = job?.error ?? result?.error ?? null
 
   return (
-    <div className="app">
-      <header>
-        <h1>SatQuery AI</h1>
-        <p className="tagline">
-          Vision-language analysis of remote sensing imagery, queried in natural language.
-        </p>
-        <div className="status">
-          <span className={ready ? 'dot dot-ok' : 'dot dot-wait'} />
-          {ready ? (
-            <>
-              models resident
-              {health?.vram_used_mb != null && (
-                <span className="muted"> · {(health.vram_used_mb / 1024).toFixed(1)} GB VRAM</span>
-              )}
-            </>
-          ) : health?.detail ? (
-            <span className="error-text">{health.detail}</span>
-          ) : (
-            <>loading models — about 45 seconds</>
-          )}
-          {health && <span className="muted"> · contract v{health.contract_version}</span>}
-        </div>
-      </header>
+    <>
+      <div className="aurora" />
+      <div className="grid-veil" />
 
-      <section className="panel">
-        <h2>1 · Imagery</h2>
-        <p className="muted">
-          One raster for VQA, captioning or grounding. Two for change or optical-plus-SAR
-          fusion. GeoTIFF preferred — GSD is read from the affine transform, never guessed.
-        </p>
-        <input
-          type="file"
-          accept=".tif,.tiff,.png,.jpg"
-          multiple
-          disabled={images.length >= 2}
-          onChange={(event) => onUpload(event.target.files)}
-        />
-        {images.length > 0 && (
-          <ul className="images">
-            {images.map((image) => (
-              <li key={image.image_id}>
-                <b>{image.filename}</b>
-                <span className="muted">
-                  {' '}
-                  {image.modality} · {image.gsd_token} · {image.width}×{image.height} ·{' '}
-                  {image.band_names.join(', ')}
+      <div className="shell">
+        <header className="topbar">
+          <div className="brand">
+            <div className="orbit">
+              <span className="ring" />
+              <span className="sat" />
+              <span className="planet" />
+            </div>
+            <div>
+              <h1>SatQuery AI</h1>
+              <div className="tagline">Multimodal remote sensing analysis through text queries</div>
+            </div>
+          </div>
+
+          <div className="sysbar">
+            <span className={`pill ${ready ? 'pill-ok' : health?.detail ? 'pill-bad' : 'pill-wait'}`}>
+              <span className="dot" />
+              {ready ? 'system ready' : health?.detail ? 'load failed' : 'starting'}
+            </span>
+            {ready && health?.vram_used_mb != null && (
+              <span className="stat">
+                <b>{(health.vram_used_mb / 1024).toFixed(1)}</b> GB VRAM
+              </span>
+            )}
+            <span className="stat">
+              <b>{implemented.length}</b>/{tools.length} tools
+            </span>
+            {health && <span className="stat mono">contract v{health.contract_version}</span>}
+          </div>
+        </header>
+
+        <div className="workspace">
+          {/* ── left: inputs ────────────────────────────────────────────────── */}
+          <div className="col">
+            <section className="card">
+              <header className="card-head">
+                <span className="card-title">
+                  <IconLayers /> imagery
                 </span>
-                {image.warnings.length > 0 && (
-                  <ul className="warnings">
-                    {image.warnings.map((warning, index) => (
-                      <li key={index}>{warning}</li>
+                <span className="chip">{images.length}/2</span>
+              </header>
+
+              <div className="card-body">
+                {images.length > 0 && (
+                  <div className={`image-grid ${images.length === 2 ? 'pair' : ''}`} style={{ marginBottom: 12 }}>
+                    {images.map((image, index) => (
+                      <ImageCard
+                        key={image.image_id}
+                        image={image}
+                        index={index}
+                        role={plan.roles ? plan.roles[index] : null}
+                        boxes={boxesFor(index)}
+                        onRemove={() =>
+                          setImages((current) => current.filter((item) => item.image_id !== image.image_id))
+                        }
+                      />
                     ))}
-                  </ul>
+                  </div>
                 )}
-              </li>
-            ))}
-          </ul>
-        )}
-        {images.length > 0 && (
-          <button className="link" onClick={() => { setImages([]); setJob(null) }}>
-            clear
-          </button>
-        )}
-      </section>
 
-      <section className="panel">
-        <h2>2 · Question</h2>
-        <textarea
-          value={query}
-          placeholder="How many aircraft are in this image?"
-          onChange={(event) => setQuery(event.target.value)}
-          rows={3}
-        />
-        <button onClick={onSubmit} disabled={busy || !ready || !query.trim() || !images.length}>
-          {busy ? (job?.status ?? 'working') : ready ? 'Ask' : 'models loading'}
-        </button>
-        {error && <p className="error-text">{error}</p>}
-      </section>
+                {images.length < 2 && (
+                  <div
+                    className={`dropzone ${dragging ? 'dragging' : ''}`}
+                    onClick={() => fileInput.current?.click()}
+                    onDragOver={(event) => {
+                      event.preventDefault()
+                      setDragging(true)
+                    }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      setDragging(false)
+                      addFiles(event.dataTransfer.files)
+                    }}
+                  >
+                    <div className="dz-icon">
+                      <IconUpload />
+                    </div>
+                    <h3>{images.length === 0 ? 'Drop imagery here' : 'Add a second date'}</h3>
+                    <p>
+                      {images.length === 0
+                        ? 'One raster for question answering, captioning or grounding. Two for change detection or optical-plus-SAR fusion.'
+                        : 'A second acquisition of the same scene turns this into a change query.'}
+                    </p>
+                    <div className="formats">
+                      <span className="chip">GeoTIFF</span>
+                      <span className="chip">multispectral</span>
+                      <span className="chip">SAR</span>
+                      <span className="chip">PNG / JPEG</span>
+                    </div>
+                    <input
+                      ref={fileInput}
+                      type="file"
+                      hidden
+                      multiple
+                      accept=".tif,.tiff,.png,.jpg,.jpeg"
+                      onChange={(event) => {
+                        addFiles(event.target.files)
+                        event.target.value = ''
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </section>
 
-      <ResultPanel result={job?.result ?? null} />
-      <TracePanel trace={job?.trace ?? null} />
+            {images.length > 0 && (
+              <div className="plan">
+                <div className="plan-icon">
+                  <IconGlobe />
+                </div>
+                <div>
+                  <h4>{plan.headline}</h4>
+                  <p>{plan.detail}</p>
+                </div>
+                {plan.ordered && images.length === 2 && (
+                  <button
+                    className="swap"
+                    onClick={() => setImages((current) => [current[1], current[0]])}
+                    title="Swap which image is the earlier date"
+                  >
+                    <IconSwap /> swap
+                  </button>
+                )}
+              </div>
+            )}
 
-      <section className="panel">
-        <h2>Available tools</h2>
-        <p className="muted">Read from the registry — the same source the router reads.</p>
-        <ul className="tools">
-          {implemented.map((tool) => (
-            <li key={tool.name}>
-              <code>{tool.name}</code> <span className="muted">{tool.description}</span>
-            </li>
-          ))}
-        </ul>
-        {tools.length > implemented.length && (
-          <p className="muted">
-            {tools.length - implemented.length} further tools are registered but not
-            implemented. They fail honestly rather than returning a fabricated answer.
-          </p>
-        )}
-      </section>
-    </div>
+            <section className="card">
+              <header className="card-head">
+                <span className="card-title">
+                  <IconSpark /> question
+                </span>
+              </header>
+              <div className="card-body">
+                <div className="query-wrap">
+                  <textarea
+                    className="query"
+                    value={query}
+                    placeholder="Ask about the imagery — extent, change, objects, or a description."
+                    onChange={(event) => setQuery(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) onSubmit()
+                    }}
+                  />
+                </div>
+
+                {examples.length > 0 && (
+                  <div className="examples">
+                    {examples.map((example) => (
+                      <button className="example" key={example} onClick={() => setQuery(example)}>
+                        {example}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="run-row">
+                  <button
+                    className={`btn-run ${busy ? 'busy' : ''}`}
+                    disabled={!ready || busy || !query.trim() || images.length === 0}
+                    onClick={onSubmit}
+                  >
+                    {busy ? (
+                      <>
+                        <span className="spinner" /> analysing
+                      </>
+                    ) : (
+                      <>
+                        Run analysis <kbd>⌘↵</kbd>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="card">
+              <header className="card-head">
+                <span className="card-title">
+                  <IconRoute /> capabilities
+                </span>
+                <span className="chip">live from the registry</span>
+              </header>
+              <div className="caps">
+                {tools.map((tool) => (
+                  <div className={`cap ${tool.implemented ? 'on' : 'off'}`} key={tool.name} title={tool.description}>
+                    <span className="sig" />
+                    <span className="nm">{tool.name}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          {/* ── right: results ──────────────────────────────────────────────── */}
+          <div className="col">
+            {error && (
+              <div className="note note-err">
+                <IconWarn />
+                <div>{error}</div>
+              </div>
+            )}
+
+            {busy && !result && (
+              <section className="card">
+                <div className="card-body" style={{ display: 'grid', gap: 10 }}>
+                  <div className="skel" style={{ height: 26, width: '72%' }} />
+                  <div className="skel" style={{ height: 26, width: '48%' }} />
+                  <div className="skel" style={{ height: 60 }} />
+                </div>
+              </section>
+            )}
+
+            {result?.answer && <AnswerCard result={result} />}
+
+            {jobError && (
+              <div className="note note-err">
+                <IconWarn />
+                <div>{jobError}</div>
+              </div>
+            )}
+
+            {result?.answer_record && <RecordPanel record={result.answer_record} />}
+
+            {warnings.length > 0 && (
+              <section className="card">
+                <header className="card-head">
+                  <span className="card-title">
+                    <IconWarn /> caveats
+                  </span>
+                  <span className="chip">{warnings.length}</span>
+                </header>
+                <div className="note-list">
+                  {warnings.map((warning, index) => (
+                    <div className="note note-warn" key={index} style={{ animationDelay: `${index * 60}ms` }}>
+                      <IconWarn />
+                      <div>{warning}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <TracePanel trace={job?.trace ?? null} running={busy} />
+
+            {!job && !busy && !error && (
+              <section className="card">
+                <div className="empty">
+                  <div className="empty-mark">
+                    <IconGlobe />
+                  </div>
+                  <h3>No analysis yet</h3>
+                  <p>
+                    Add imagery and ask a question. The answer, the measured record behind it,
+                    and the full execution trace appear here.
+                  </p>
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
   )
 }

@@ -41,6 +41,42 @@ export type BoundingBox = {
   image_index: number
 }
 
+/** One measured value plus the tool that produced it. The provenance is never blank. */
+export type Fact = {
+  key: string
+  value: unknown
+  unit: string | null
+  provenance: string
+  confidence: number | null
+}
+
+export type AreaDelta = {
+  area_t1_m2: number
+  area_t2_m2: number
+  absolute_m2: number
+  relative: number
+  trend: 'increased' | 'decreased' | 'unchanged'
+}
+
+/**
+ * The record the answer was computed from.
+ *
+ * This is the part of the system worth showing. The text answer is a rendering of this
+ * object, so every number on screen can be traced back to the tool that measured it --
+ * which is the difference between an answer and a plausible sentence.
+ */
+export type AnswerRecord = {
+  intent: string
+  facts: Fact[]
+  class_proportions: Record<string, number>
+  object_counts: Record<string, number>
+  area_deltas: Record<string, AreaDelta>
+  change_transitions: Record<string, number>
+  referenced_regions: Record<string, unknown>[]
+  agreement_scores: Record<string, number>
+  warnings: string[]
+}
+
 export type ToolResult = {
   request_id: string
   tool_name: string
@@ -53,6 +89,7 @@ export type ToolResult = {
     overlay_path: string | null
     index_maps: Record<string, string>
   }
+  answer_record: AnswerRecord | null
   params_used: Record<string, unknown>
   latency_ms: number
   warnings: string[]
