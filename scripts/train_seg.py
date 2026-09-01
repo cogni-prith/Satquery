@@ -32,12 +32,25 @@ LOG = get_logger("train-seg")
 
 
 class PackedLandCover:
-    """The packed cache as a torch dataset. Held in memory; the cache is sized to fit."""
+    """The packed cache as a torch dataset. Held in memory; the cache is sized to fit.
 
-    def __init__(self, path: Path, augment: bool = False) -> None:
-        blob = np.load(path)
-        self.images = blob["images"]
-        self.masks = blob["masks"]
+    Arrays can be passed in rather than re-read. The cache is 1.5 GB, and the training and
+    evaluation views differ only in whether they augment -- loading it twice doubles the
+    resident memory to buy nothing.
+    """
+
+    def __init__(
+        self,
+        path: Path | None = None,
+        augment: bool = False,
+        arrays: tuple[np.ndarray, np.ndarray] | None = None,
+    ) -> None:
+        if arrays is not None:
+            self.images, self.masks = arrays
+        else:
+            blob = np.load(path)
+            self.images = blob["images"]
+            self.masks = blob["masks"]
         self.augment = augment
         self.rng = np.random.default_rng(1337)
 
@@ -136,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
     holdout = max(1, len(full) // 10)
     indices = np.random.default_rng(args.seed).permutation(len(full))
     train_set = torch.utils.data.Subset(full, indices[holdout:].tolist())
-    eval_source = PackedLandCover(train_path, augment=False)
+    eval_source = PackedLandCover(augment=False, arrays=(full.images, full.masks))
     eval_set = torch.utils.data.Subset(eval_source, indices[:holdout].tolist())
     LOG.info("train %d patches, held out %d", len(train_set), len(eval_set))
 

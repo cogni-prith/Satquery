@@ -103,6 +103,10 @@ class LandCoverSegmenter:
                 if stem.bias is not None and new.bias is not None:
                     new.bias.copy_(stem.bias)
             model.segformer.encoder.patch_embeddings[0].proj = new
+            # Record the change on the config, or `save_pretrained` writes a config that
+            # says three channels beside weights that are four, and the checkpoint cannot
+            # be reloaded. An artifact that will not round-trip is not an artifact.
+            model.config.num_channels = self.config.in_channels
 
         self._module = model
         return model
@@ -195,15 +199,42 @@ class LandCoverSegmenter:
         return path
 
     def load(self, path: Path) -> Any:
-        """Load trained weights.
+        """Load trained weights into a freshly built architecture.
+
+        Builds first and loads the state dict, rather than letting `from_pretrained`
+        infer the architecture. The band count is ours, not the checkpoint's: a checkpoint
+        written before the config carried `num_channels` would otherwise reconstruct a
+        three-channel stem and refuse its own four-channel weights.
 
         Raises:
             FileNotFoundError: The directory holds no model. Failing here is the point --
                 the caller must not end up with a randomly initialised head that answers.
         """
-        from transformers import SegformerForSemanticSegmentation
+        import torch
 
         if not path.is_dir():
             raise FileNotFoundError(f"no trained segmenter at {path}")
-        self._module = SegformerForSemanticSegmentation.from_pretrained(path)
-        return self._module
+
+        weights = path / "model.safetensors"
+        binary = path / "pytorch_model.bin"
+        if not weights.exists() and not binary.exists():
+            raise FileNotFoundError(f"{path} holds no model weights")
+
+        module = self.build()
+        if weights.exists():
+            from safetensors.torch import load_file
+
+            state = load_file(weights)
+        else:
+            state = torch.load(binary, map_location="cpu")
+
+        missing, unexpected = module.load_state_dict(state, strict=False)
+        if missing:
+            raise RuntimeError(
+                f"checkpoint at {path} is missing {len(missing)} tensors, first: "
+                f"{missing[:3]}. Refusing to run a partially loaded head."
+            )
+        if unexpected:
+            _LOG.warning("checkpoint carries %d unexpected tensors", len(unexpected))
+        self._module = module
+        return module

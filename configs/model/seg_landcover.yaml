@@ -1,9 +1,43 @@
-# Land cover segmentation. Every quantitative answer is a pixel count over this output,
-# so its per-class IoU is the ceiling on the whole system.
+# Land-cover segmenter — trained, and the numbers below are measured.
+#
+# Every quantitative answer in the system is a pixel count over this model's output, so
+# these per-class IoUs are the ceiling on the whole thing.
+#
+# MEASURED on the reBEN validation split, 4,000 patches it never saw (scripts/eval_seg.py):
+#   water          0.9499
+#   vegetation     0.8213
+#   agriculture    0.8146
+#   built_up       0.6023
+#   wetland        0.3666
+#   mean (present) 0.7109
+#
+# Reported per class, never as a single mean: a mean over five classes on reBEN is
+# dominated by forest and farmland and can look healthy while water and built-up are near
+# zero, and those two are what every area answer rests on.
+#
+# built_up at 0.60 is the reason this model exists. NDBI cannot separate impervious
+# surface from dry bare soil -- on real Alentejo imagery it read 39.7% built-up on a cell
+# CORINE labels as agro-forestry with no urban class -- so the deterministic path reports
+# built-up as an explicit upper bound. This turns that bound into a measurement.
+#
+# wetland at 0.37 is weak and stays reported. It is 1.0% of validation pixels and CORINE
+# wetland is genuinely hard to separate from water and vegetation at 10 m. Dropping the
+# class would raise the mean and tell the reader less.
+
 encoder: nvidia/mit-b0
-in_channels: 4          # OPTICAL_BAND_ORDER_4: B02, B03, B04, B08
-num_classes: 6          # CLC Level-1 plus background; ids are the output-layer ordering
-ignore_index: 255
-# Built-up and water are rare and heavily zero-inflated in reBEN, so plain cross-entropy's
-# minimiser is an empty mask scoring ~96% pixel accuracy while extracting nothing.
-loss: ce_dice
+in_channels: 4              # B02, B03, B04, B08 -- the frozen 10 m band order
+num_classes: 6              # CORINE Level-1 plus an ignored `unlabelled` at index 0
+ignore_index: 0
+dice_weight: 0.5            # built_up is 3.2% of pixels and wetland 1.0%; plain CE's
+                            # minimiser sits near an empty mask at high pixel accuracy
+
+train:
+  steps: 24000              # ~18 epochs over 12,000 patches. 3,000 steps ran in 72 s and
+                            # left every class short: built_up 0.626 -> 0.668, wetland
+                            # 0.098 -> 0.436 on the same holdout.
+  batch: 8
+  lr: 6.0e-5
+  scheduler: cosine
+  warmup_ratio: 0.05
+  save_steps: 250           # this machine's external disk has slept mid-run before
+  weights: train/landcover/final
