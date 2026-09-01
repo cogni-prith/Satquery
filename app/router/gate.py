@@ -59,8 +59,14 @@ def gate(images: list[ImageRef], task: TaskType | None = None) -> tuple[InputCon
     modalities = [image.modality for image in images]
     gsd = max((i.gsd_m for i in images if i.gsd_m is not None), default=None)
 
-    candidates = REGISTRY.candidates(config, modalities, gsd, task)
-    return config, [spec for spec in candidates if spec.implemented]
+    candidates = [
+        spec for spec in REGISTRY.candidates(config, modalities, gsd, task) if spec.implemented
+    ]
+    # Highest preference first. Where a learned tool and its deterministic fallback are
+    # both legal, the choice must be stated on the spec rather than fall out of whichever
+    # name happens to sort first.
+    candidates.sort(key=lambda spec: spec.preference, reverse=True)
+    return config, candidates
 
 
 def explain_refusal(images: list[ImageRef], task: TaskType | None = None) -> str:
