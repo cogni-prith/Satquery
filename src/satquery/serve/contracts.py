@@ -231,6 +231,13 @@ class Evidence(BaseModel):
         default=None, description="Single-channel mask raster written under the artifact root."
     )
     overlay_path: Path | None = Field(default=None, description="Rendered RGB overlay for display.")
+    highlight_path: Path | None = Field(
+        default=None,
+        description=(
+            "Transparent RGBA layer marking the pixels this answer is about, sized to the "
+            "first image. Meant to be composited over the live imagery, not shown alone."
+        ),
+    )
     index_maps: dict[str, Path] = Field(
         default_factory=dict,
         description='Deterministic index rasters by name, e.g. {"ndwi": ..., "ndbi": ...}.',

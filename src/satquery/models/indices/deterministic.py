@@ -20,7 +20,14 @@ from __future__ import annotations
 import numpy as np
 
 from satquery.models.base import BaseTool, infer_input_config_from_images
-from satquery.models.indices.render import render_change_map, render_mask_overlay, write_png
+from satquery.models.indices.render import (
+    CLASS_RGB,
+    render_change_alpha,
+    render_change_map,
+    render_mask_alpha,
+    render_mask_overlay,
+    write_png,
+)
 from satquery.preprocess.constants import SAR_WATER_DB_THRESHOLD
 from satquery.serve.contracts import Evidence, InputConfig, Modality, ToolRequest, ToolResult
 from satquery.symbolic.record import build_record
@@ -226,6 +233,15 @@ class DeterministicIndexTool(BaseTool):
                     out / f"{stem}_overlay.png",
                     render_mask_overlay(base, outputs["masks"]),
                 )
+                # The class the question was about, as a transparent layer for the canvas.
+                first_class = next(iter(outputs["masks"]))
+                evidence.highlight_path = write_png(
+                    out / f"{stem}_highlight.png",
+                    render_mask_alpha(
+                        outputs["masks"][first_class],
+                        rgb=CLASS_RGB.get(first_class, (56, 189, 248)),
+                    ),
+                )
             elif "masks_t1" in outputs:
                 shared = sorted(set(outputs["masks_t1"]) & set(outputs["masks_t2"]))
                 if shared:
@@ -235,6 +251,10 @@ class DeterministicIndexTool(BaseTool):
                         render_change_map(
                             base, outputs["masks_t1"][name], outputs["masks_t2"][name]
                         ),
+                    )
+                    evidence.highlight_path = write_png(
+                        out / f"{stem}_highlight.png",
+                        render_change_alpha(outputs["masks_t1"][name], outputs["masks_t2"][name]),
                     )
                     evidence.index_maps = {
                         f"{name}_t1": write_png(

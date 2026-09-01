@@ -73,3 +73,50 @@ def render_change_map(base_rgb: np.ndarray, mask_t1: np.ndarray, mask_t2: np.nda
     out[~first & second] = GAINED_RGB
     out[first & ~second] = LOST_RGB
     return out
+
+
+def render_change_alpha(
+    mask_t1: np.ndarray,
+    mask_t2: np.ndarray,
+    *,
+    rgb: tuple[int, int, int] = (255, 62, 78),
+) -> np.ndarray:
+    """Changed pixels in one colour on a transparent field, as `(H, W, 4)` RGBA.
+
+    Made for laying over the live imagery rather than sitting in a tile, so everything
+    that did not change must be genuinely transparent -- a dimmed backdrop baked into the
+    overlay would double-darken the scene underneath it.
+
+    Both directions are painted the same colour here, which is what makes it readable as
+    "this is what moved" at a glance. It is also why it is not the whole story: gain and
+    loss are different events, and `render_change_map` keeps them apart. The two are meant
+    to be read together.
+
+    The edge is deliberately hard, with no feathering. A soft edge would suggest the
+    measurement has uncertainty at the boundary that the pixel count does not model.
+    """
+    first = np.asarray(mask_t1, dtype=bool)
+    second = np.asarray(mask_t2, dtype=bool)
+    if first.shape != second.shape:
+        raise ValueError(f"masks must share a grid, got {first.shape} and {second.shape}")
+
+    changed = first ^ second
+    out = np.zeros((*changed.shape, 4), dtype=np.uint8)
+    out[changed, 0] = rgb[0]
+    out[changed, 1] = rgb[1]
+    out[changed, 2] = rgb[2]
+    out[changed, 3] = 255
+    return out
+
+
+def render_mask_alpha(
+    mask: np.ndarray, *, rgb: tuple[int, int, int] = (56, 189, 248)
+) -> np.ndarray:
+    """One class mask on a transparent field, for overlaying on the live imagery."""
+    solid = np.asarray(mask, dtype=bool)
+    out = np.zeros((*solid.shape, 4), dtype=np.uint8)
+    out[solid, 0] = rgb[0]
+    out[solid, 1] = rgb[1]
+    out[solid, 2] = rgb[2]
+    out[solid, 3] = 255
+    return out
