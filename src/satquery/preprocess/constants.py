@@ -39,6 +39,7 @@ __all__ = [
     "CHANGE_RELATIVE_FLOOR",
     "CONFIDENCE_BANDS",
     "CORINE_LEVEL1_BUILT_UP",
+    "CORINE_LEVEL1_TO_CLASS",
     "CORINE_LEVEL1_WATER",
     "DB_EPS",
     "DB_SCALE",
@@ -59,6 +60,8 @@ __all__ = [
     "INSTRUCTION_FUSION_EXTRACTION",
     "INSTRUCTION_REFER_TEMPLATE",
     "INSTRUCTION_VQA_TEMPLATE",
+    "LANDCOVER_CLASSES",
+    "LANDCOVER_IGNORE_INDEX",
     "METRES_PER_DEGREE_LAT",
     "METRES_PER_DEGREE_LON_EQUATOR",
     "NDBI_BUILTUP_THRESHOLD",
@@ -460,6 +463,41 @@ FUSION_EXTRACTION_CLASSES: Final[tuple[str, ...]] = ("built_up", "water")
 
 #: Index that provides the deterministic second opinion for each extraction class.
 FUSION_CLASS_INDEX: Final[dict[str, str]] = {"built_up": "ndbi", "water": "ndwi"}
+
+# ── land-cover segmentation classes ───────────────────────────────────────────────
+#
+# CORINE Level-1 collapsed to five classes, in the order the segmentation head emits.
+# Level-1 rather than Level-3 because reBEN's per-patch label distribution is long-tailed:
+# many of the 44 Level-3 classes appear in a handful of patches, and a head trained on
+# them would learn the frequent few and guess the rest. Five classes it can actually see
+# beats forty-four it cannot.
+#
+# Index 0 is reserved for "unlabelled" so a pixel with no reference value is ignored by
+# the loss rather than silently taught as a class.
+LANDCOVER_CLASSES: Final[tuple[str, ...]] = (
+    "unlabelled",
+    "built_up",
+    "agriculture",
+    "vegetation",
+    "wetland",
+    "water",
+)
+
+#: CORINE Level-1 digit -> index into `LANDCOVER_CLASSES`.
+#:
+#: The leading digit of a Level-3 code is its Level-1 group, which is what makes this a
+#: lookup rather than a table of 44 entries: 512 (water bodies) and 511 (water courses)
+#: both start with 5 and both mean water.
+CORINE_LEVEL1_TO_CLASS: Final[dict[int, int]] = {
+    1: 1,  # artificial surfaces  -> built_up
+    2: 2,  # agricultural areas   -> agriculture
+    3: 3,  # forest and semi-natural -> vegetation
+    4: 4,  # wetlands             -> wetland
+    5: 5,  # water bodies         -> water
+}
+
+#: Ignored by the segmentation loss. Matches `LANDCOVER_CLASSES[0]`.
+LANDCOVER_IGNORE_INDEX: Final[int] = 0
 
 # -- change verdicts --------------------------------------------------------------------
 
