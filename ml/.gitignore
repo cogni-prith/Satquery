@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Datasets: `data/` holds only symlinks into $SATQUERY_DATA_ROOT, never the data itself.
+data/*
+!data/.gitkeep
+
+# Checkpoints, adapters, caches, eval output
+artifacts/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# Exploration. Nothing in here is ever committed.
+scratch/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Experiment tracking
+runs/
+wandb/
+lightning_logs/
+
+# Notebooks are never committed; exploration goes in scratch/.
+*.ipynb
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# Mined change pairs: regenerate with scripts/find_change_pairs.py rather than commit
+# 4.5 MB of derived rasters that the LMDB already holds.
+demo_inputs/pairs/*.tif
+demo_inputs/*_SAR.tif

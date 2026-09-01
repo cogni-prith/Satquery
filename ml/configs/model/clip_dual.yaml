@@ -1,0 +1,11 @@
+# CLIP-style dual encoder on BigEarthNet.txt. The remote-sensing adaptation artifact,
+# trained first because it is what satisfies the problem statement's adaptation mandate.
+image_encoder: timm/vit_base_patch16_224.openai_clip
+text_encoder: openai/clip-vit-base-patch16
+embed_dim: 512
+temperature: 0.07
+# The text side already speaks English; the image side is what must learn remote sensing.
+# Freezing text roughly halves optimiser memory, which matters on an 8 GB card.
+freeze_text_tower: true
+image_size: 224
+in_channels: 3

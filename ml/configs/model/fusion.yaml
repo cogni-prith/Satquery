@@ -1,0 +1,20 @@
+# Dual-encoder optical + SAR fusion segmenter.
+#
+# Both branches are ImageNet-initialised and then adapted; they are deliberately not
+# weight-shared, because one filter bank cannot serve reflectance and backscatter at
+# once. `gated` fusion is the default: it learns a per-pixel weighting, which is the
+# strategy able to suppress the optical branch over cloud and the SAR branch over
+# calm homogeneous surfaces.
+#
+# There is no `image_size` here on purpose. The model pads to the encoder stride and
+# crops back, so reBEN's 120x120 patches keep their true 10 m GSD; resizing them would
+# make the frozen GSD token describe a resolution the pixels no longer have.
+
+optical_encoder: resnet50
+sar_encoder: resnet18
+optical_in_channels: 4      # OPTICAL_BAND_ORDER_4: B02, B03, B04, B08, all native 10 m
+sar_in_channels: 3          # the frozen SAR pseudo-RGB layout
+embed_dim: 512
+fusion: gated
+targets: [built_up, water]
+pretrained: true

@@ -1,0 +1,35 @@
+# VRSBench -- single-image training and evaluation.
+#
+# Judging rows served: "one more single-image task" (captioning and grounding, we do
+# both) and part of single-image VQA.
+name: vrsbench
+
+about:
+  url: https://github.com/lx709/VRSBench
+  images: 29614
+  referring_expressions: 52472
+  qa_pairs: 123221
+  licence: TBD - verify before release
+
+root: vrsbench
+
+split: train
+splits: [train, val, test]
+
+# One of VRSBENCH_SUBSETS in data/datasets/vrsbench.py. Each maps to a different
+# TaskType and a different metric, so the mixer draws all three.
+subset: vqa
+subsets: [caption, vqa, referring]
+
+modalities: [optical_rgb]
+image_size: 512
+# Aerial imagery, mixed sources. Roughly sub-metre, but per-image GSD is computed from
+# the transform at load time and is never taken from this value.
+gsd_m_nominal: 0.3
+
+metrics:
+  caption: [bleu4, meteor, rouge_l, cider]
+  vqa: [llm_judge_accuracy]     # open-set, judged rather than exact-matched
+  referring: [acc_at_0.5]       # horizontal boxes
+
+checksums: {}

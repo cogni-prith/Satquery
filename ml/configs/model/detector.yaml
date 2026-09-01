@@ -1,0 +1,38 @@
+# Object detector — trained, and CLOSED vocabulary.
+#
+# The tool is registered as `detector.openvocab` because that is what the architecture
+# wants. This model is not that. It is Faster R-CNN fine-tuned on VRSBench's 26 fixed
+# classes and it cannot find anything outside them. Open-vocabulary detection needs a
+# text-conditioned model such as Grounding-DINO, and labels this dataset does not provide.
+# The spec description says so; the name is kept for contract stability.
+#
+# MEASURED on a 10% holdout, IoU 0.5, score threshold 0.5:
+#   recall     0.6439   (463 of 719 labelled boxes)
+#   precision  0.5928   (463 of 781 detections)
+#
+# Read the precision as a FLOOR, not an estimate. VRSBench annotates one object per
+# referring expression -- 6,975 boxes across 4,000 images, about 1.7 each -- so a scene
+# with forty vehicles may carry one labelled box. A correct detection of a real but
+# unlabelled object is scored here as a false positive. The same sparsity caps recall from
+# the other side: unannotated instances were taught to the model as background, so it was
+# actively trained to miss things.
+#
+# Neither number is fixable by training longer. They are properties of the labels.
+
+architecture: fasterrcnn_resnet50_fpn
+weights: train/detector/model.pt      # relative to $SATQUERY_ARTIFACT_ROOT
+image_size: 384                        # VRSBench tiles are 512; 384 keeps a batch on 8 GB
+score_threshold: 0.5                   # the operating point the numbers above were measured at
+
+vocabulary_source: VRSBench_EVAL_referring.json
+num_classes: 26
+
+train:
+  images: 4000
+  boxes: 6975
+  epochs: 6                            # mean loss 0.3496 -> 0.1224
+  batch: 4
+  lr: 5.0e-3
+  optimiser: sgd
+  grad_clip: 10.0                      # detection losses spike on a batch with a tiny box
+  backbone: pretrained COCO            # 4,000 images cannot learn general object features

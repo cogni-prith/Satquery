@@ -1,0 +1,38 @@
+# Two-tower discriminative head for CDVQA.
+#
+# Doctrine: do not route CDVQA through the VLM alone. The answer set is
+# closed, so a classifier beats a generative model on accuracy and runs in milliseconds.
+# The VLM still produces the free-form change description; this head produces the scored
+# answer. Both are routed, both are reported.
+#
+# TWO TOWERS, not one. CDVQA is visual *question* answering: "Have the areas of buildings
+# changed?" and "Have the areas of water changed?" have different answers for the same
+# image pair. An image-only Siamese network cannot express that, so a question encoder is
+# fused in before classification.
+#
+# Output width is NOT set here. It is len(CDVQA_ANSWERS) from preprocess/constants.py,
+# which is 19 -- VERIFIED against the published annotations, not the six classes the earlier draft
+# describes. The six land-cover classes cover only 23.4% of answers; yes/no is 52.2% and
+# change-ratio buckets are 24.4%. A six-way head would cap out around 23%.
+
+# timm backbone, weight-shared across the two dates. ResNet-18 rather than 50: the
+# corpus is 66k questions over only 1,600 training image pairs, so the larger encoder
+# mostly buys overfitting, and this trains in a fraction of the time on an 8 GB card.
+encoder_name: resnet18
+pretrained: true
+
+# SECOND ships 512x512. Halved to 256 -- 4x less activation memory per date, and change
+# at this GSD (0.53 m/pixel) is comfortably visible at 256.
+image_size: 256
+
+# Question tower. Deliberately tiny: the questions are templated, with 297 distinct
+# strings over a 46-word vocabulary, so a learned embedding plus GRU is sufficient and
+# needs no pretrained language model.
+text_embed_dim: 64
+text_hidden_dim: 128
+
+# Classifier over [f_t1, f_t2, |f_t1 - f_t2|, q]. Keeping f_t1 and f_t2 alongside the
+# difference matters: the difference carries "what changed", but questions like
+# "what is the largest change" also need to know what is actually there.
+hidden_dim: 512
+dropout: 0.1

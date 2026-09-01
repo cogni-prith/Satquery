@@ -1,0 +1,7 @@
+# Semantic change: from-class to-class transitions, not a binary "something changed" mask.
+# A binary mask cannot say what something became, and that is the answer.
+encoder: resnet18
+shared_weights: true    # separate towers would key on acquisition artefacts, not change
+num_classes: 6
+in_channels: 3
+image_size: 512

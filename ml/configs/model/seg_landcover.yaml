@@ -1,0 +1,63 @@
+# Land-cover segmenter — trained, and the numbers below are measured.
+#
+# Every quantitative answer in the system is a pixel count over this model's output, so
+# these per-class IoUs are the ceiling on the whole thing.
+#
+# MEASURED on the reBEN validation split, 4,000 patches it never saw (scripts/eval_seg.py):
+#   water          0.9499
+#   vegetation     0.8213
+#   agriculture    0.8146
+#   built_up       0.6023
+#   wetland        0.3666
+#   mean (present) 0.7109
+#
+# Reported per class, never as a single mean: a mean over five classes on reBEN is
+# dominated by forest and farmland and can look healthy while water and built-up are near
+# zero, and those two are what every area answer rests on.
+#
+# built_up at 0.60 is the reason this model exists. NDBI cannot separate impervious
+# surface from dry bare soil -- on real Alentejo imagery it read 39.7% built-up on a cell
+# CORINE labels as agro-forestry with no urban class -- so the deterministic path reports
+# built-up as an explicit upper bound. This turns that bound into a measurement.
+#
+# wetland at 0.37 is weak and stays reported. It is 1.0% of validation pixels and CORINE
+# wetland is genuinely hard to separate from water and vegetation at 10 m. Dropping the
+# class would raise the mean and tell the reader less.
+
+encoder: nvidia/mit-b0
+in_channels: 4              # B02, B03, B04, B08 -- the frozen 10 m band order
+num_classes: 6              # CORINE Level-1 plus an ignored `unlabelled` at index 0
+ignore_index: 0
+dice_weight: 0.5            # built_up is 3.2% of pixels and wetland 1.0%; plain CE's
+                            # minimiser sits near an empty mask at high pixel accuracy
+
+train:
+  steps: 24000              # ~18 epochs over 12,000 patches. 3,000 steps ran in 72 s and
+                            # left every class short: built_up 0.626 -> 0.668, wetland
+                            # 0.098 -> 0.436 on the same holdout.
+  batch: 8
+  lr: 6.0e-5
+  scheduler: cosine
+  warmup_ratio: 0.05
+  save_steps: 250           # this machine's external disk has slept mid-run before
+  weights: train/landcover/final
+
+# ── what this model actually predicts ────────────────────────────────────────────
+#
+# CORINE labels a DESIGNATED land cover, not an observation. A reservoir is a water body
+# whether or not there is water in it today, so a head trained on CORINE learns the
+# designation and inherits that semantics.
+#
+# MEASURED on the Alentejo demo patch during the 2017 drought:
+#   CORINE label      55.6% water
+#   this segmenter    34.8% water   (IoU 0.613 against the CORINE label)
+#   NDWI observed     18.7% water   (IoU 0.337 against the CORINE label)
+#
+# The segmenter agrees with the label it was trained on far better than NDWI does, which
+# is correct behaviour and not a defect -- but it means the learned water figure is closer
+# to the mapped extent than to the wet surface.
+#
+# So: for "how much water is there now", NDWI is the right instrument. For built-up, where
+# NDBI cannot separate concrete from dry bare soil, the learned head is. The serving tool
+# reports both and names this mismatch in a warning rather than letting a reader assume
+# the learned number supersedes the index.
