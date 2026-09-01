@@ -10,9 +10,29 @@ import type { ToolResult } from './api'
  * read. These helpers render the label; they never substitute a different one.
  */
 
-/** Human-readable rendering of a frozen CDVQA label. Unknown labels pass through. */
+/**
+ * Human-readable rendering of a frozen CDVQA label or a grounding box token.
+ *
+ * Unknown answers pass through. This renders what a tool said; it never substitutes a
+ * different answer.
+ */
 export function humanise(answer: string | null): string | null {
   if (!answer) return answer
+
+  // EarthDial answers a grounding query with `{<x1><y1><x2><y2>}` on a 0-100 grid. Shown
+  // raw it reads as a parser error rather than an answer, and the box it describes is
+  // already drawn on the imagery -- so say where it is and let the picture carry the rest.
+  const box = answer.match(/^\{(?:<\d+>){4}\}$/) ? answer.match(/<(\d+)>/g) : null
+  if (box) {
+    const [x1, y1, x2, y2] = box.map((n) => Number(n.replace(/[<>]/g, '')))
+    const cx = (x1 + x2) / 2
+    const cy = (y1 + y2) / 2
+    const vertical = cy < 33 ? 'upper' : cy > 66 ? 'lower' : 'middle'
+    const horizontal = cx < 33 ? 'left' : cx > 66 ? 'right' : 'centre'
+    const where = vertical === 'middle' && horizontal === 'centre' ? 'centre' : `${vertical} ${horizontal}`
+    const area = (((x2 - x1) * (y2 - y1)) / 100).toFixed(0)
+    return `Found in the ${where} of the scene, covering about ${area}% of it. The box is drawn on the imagery above.`
+  }
 
   const range = answer.match(/^(\d+)_to_(\d+)$/)
   if (range) return `${range[1]}–${range[2]}% of the scene`

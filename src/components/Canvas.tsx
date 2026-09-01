@@ -67,30 +67,52 @@ export function Canvas({
   if (images.length === 0) return null
 
   const pair = images.length === 2
+  // The frame takes the imagery's own aspect ratio. With a fixed square frame and
+  // object-fit:contain, a non-square raster is letterboxed -- and a box positioned as a
+  // percentage of the FRAME then sits in the wrong place by exactly the letterbox.
+  const ratio =
+    images[0].width && images[0].height ? images[0].width / images[0].height : 1
 
-  const overlay = (index: number) =>
-    boxesFor(index).map((box, boxIndex) => (
+  /**
+   * Boxes arrive as ABSOLUTE PIXELS on the source raster -- that is the contract, because
+   * VRSBench scores grounding on absolute boxes -- so they are divided by that image's own
+   * dimensions here. An earlier version multiplied by 100 as though they were normalised,
+   * which turned a 77 px box on a 512 px tile into a width of 7680% and drew nothing
+   * visible at all.
+   */
+  const overlay = (index: number) => {
+    const source = images[index]
+    const pixelWidth = source?.width ?? 0
+    const pixelHeight = source?.height ?? 0
+    if (!pixelWidth || !pixelHeight) return null
+
+    return boxesFor(index).map((box, boxIndex) => (
       <div
         className="bbox"
         key={boxIndex}
         style={{
-          left: `${box.x_min * 100}%`,
-          top: `${box.y_min * 100}%`,
-          width: `${(box.x_max - box.x_min) * 100}%`,
-          height: `${(box.y_max - box.y_min) * 100}%`,
+          left: `${(box.x_min / pixelWidth) * 100}%`,
+          top: `${(box.y_min / pixelHeight) * 100}%`,
+          width: `${((box.x_max - box.x_min) / pixelWidth) * 100}%`,
+          height: `${((box.y_max - box.y_min) / pixelHeight) * 100}%`,
           animationDelay: `${boxIndex * 80}ms`,
         }}
       >
         <span>
-          {box.label}
+          {box.label.length > 28 ? `${box.label.slice(0, 28)}…` : box.label}
           {box.score != null && ` ${(box.score * 100).toFixed(0)}%`}
         </span>
       </div>
     ))
+  }
 
   return (
     <div className="stage">
-      <div className={`frame ${pair ? 'is-pair' : ''}`} ref={frame}>
+      <div
+        className={`frame ${pair ? 'is-pair' : ''}`}
+        ref={frame}
+        style={{ aspectRatio: String(ratio) }}
+      >
         <img className="layer" src={`/api/images/${images[0].image_id}/preview`} alt={images[0].filename} />
         <div className="layer-boxes">{overlay(0)}</div>
 

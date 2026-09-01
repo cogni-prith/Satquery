@@ -835,7 +835,9 @@ button { cursor: pointer; border: none; background: none; }
   user-select: none;
 }
 @keyframes frame-in { from { opacity: 0; transform: scale(0.985) translateY(8px); } to { opacity: 1; transform: none; } }
-.frame .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; image-rendering: pixelated; }
+/* `fill`, not `contain`: the frame now carries the imagery's own aspect ratio, so the two
+   are identical -- and `fill` guarantees no letterbox for a box overlay to be offset by. */
+.frame .layer { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; image-rendering: pixelated; }
 .frame .layer-clip { position: absolute; inset: 0; }
 .frame .layer-boxes { position: absolute; inset: 0; pointer-events: none; }
 
