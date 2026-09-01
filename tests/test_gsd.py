@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 
 import pytest
-from tests.fixtures.synthetic import north_up_transform
 
 from satquery.preprocess.constants import GSD_TOKEN_UNKNOWN
 from satquery.preprocess.gsd import (
@@ -16,6 +15,7 @@ from satquery.preprocess.gsd import (
     resample_scale_factor,
     strip_gsd_token,
 )
+from tests.fixtures.synthetic import north_up_transform
 
 
 def test_gsd_from_a_north_up_transform() -> None:

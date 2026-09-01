@@ -209,9 +209,9 @@ class InternVLCollator:
     def encode(self, sample: Sample) -> dict[str, Any]:
         """Encode a single sample. Separated from `__call__` so it is unit-testable."""
         import torch
-        from satquery.models.vlm.backbone import dynamic_tiles
 
         from satquery.models.base import load_model_input
+        from satquery.models.vlm.backbone import dynamic_tiles
 
         # `load_model_input`, not PIL. PIL cannot open a 4-band uint16 GeoTIFF at all --
         # which is what the reBEN cache holds -- and for SAR it would show raw backscatter
@@ -327,8 +327,8 @@ class ChangeHeadCollator:
         import numpy as np
         import torch
         from PIL import Image
-        from satquery.models.change.siamese import answer_index, encode_question
 
+        from satquery.models.change.siamese import answer_index, encode_question
         from satquery.preprocess.constants import IMAGENET_MEAN, IMAGENET_STD
 
         if len(sample.images) != 2:

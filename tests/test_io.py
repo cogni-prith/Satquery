@@ -6,15 +6,6 @@ from datetime import timedelta
 
 import numpy as np
 import pytest
-from tests.fixtures.synthetic import (
-    T1,
-    T2,
-    UTM_43N,
-    WGS84,
-    north_up_transform,
-    write_optical,
-    write_sar,
-)
 
 from satquery.io.modality import (
     canonical_band_name,
@@ -26,6 +17,15 @@ from satquery.io.pairing import bounds_of, check_pair, extent_overlap, timestamp
 from satquery.io.raster import parse_timestamp, read_image_ref, read_raster, write_raster
 from satquery.io.validate import representative_gsd, validate_inputs
 from satquery.serve.contracts import ImageRef, InputConfig, Modality
+from tests.fixtures.synthetic import (
+    T1,
+    T2,
+    UTM_43N,
+    WGS84,
+    north_up_transform,
+    write_optical,
+    write_sar,
+)
 
 # -- modality ---------------------------------------------------------------------------
 

@@ -1,7 +1,7 @@
 """Wrapper around the EarthDial-4B vision-language backbone.
 
 EarthDial is an InternVL-derived remote sensing VLM that already covers RGB, SAR,
-multispectral and bi-temporal input, which is why CLAUDE.md picks it as the primary
+multispectral and bi-temporal input, which is why the architecture picks it as the primary
 backbone: we LoRA on top of it rather than adapting a generic VLM from scratch.
 
 Two checkpoints, two registry entries, so modality routing is real rather than
@@ -23,7 +23,7 @@ a bare "file not found" until the modules are copied in from the upstream Intern
 repo. :func:`ensure_remote_code` does that, and :meth:`load` calls it. This is a defect
 in the published repo, not in our usage.
 
-Fallback order when a checkpoint misbehaves, per CLAUDE.md: GeoChat, then Qwen2.5-VL-7B
+Fallback order when a checkpoint misbehaves, by project rule: GeoChat, then Qwen2.5-VL-7B
 fine-tuned from our own mix. Do not restructure around a fallback until the primary has
 failed an actual inference smoke test.
 
@@ -563,7 +563,7 @@ class EarthDialBackbone:
 
         This is what turns the generic backbone into the remote-sensing-adapted model
         the problem statement requires. Without it the model is unadapted and, per
-        CLAUDE.md, fails SIH26167 outright.
+        the architecture, fails SIH26167 outright.
         """
         from peft import PeftModel
 

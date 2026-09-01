@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from tests.fixtures.synthetic import sar_stack
 
 from satquery.preprocess.constants import (
     DB_EPS,
@@ -12,6 +11,7 @@ from satquery.preprocess.constants import (
     SPECKLE_FILTER_WINDOW,
 )
 from satquery.preprocess.sar import directional_masks, linear_to_db, refined_lee, render_sar
+from tests.fixtures.synthetic import sar_stack
 
 
 def _cv(array: np.ndarray) -> float:

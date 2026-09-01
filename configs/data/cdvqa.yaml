@@ -14,7 +14,7 @@ name: cdvqa
 about:
   url: https://github.com/YZHJessica/CDVQA
   pairs: 2968
-  qa_pairs: 122000        # "122k+" per CLAUDE.md; exact figure TBD
+  qa_pairs: 122000        # "122k+" by project rule; exact figure TBD
   derived_from: SECOND public subset
   licence: TBD - verify before release
 

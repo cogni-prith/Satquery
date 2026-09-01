@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Train the land-cover segmenter on the packed reBEN cache.
 
-Uses `transformers.Trainer` rather than a hand-written loop, as CLAUDE.md requires: the
+Uses `transformers.Trainer` rather than a hand-written loop, as the project requires: the
 checkpointing, resume, mixed precision and logging are the parts a hand-rolled loop gets
 subtly wrong, and this run has already been interrupted once by a sleeping disk.
 

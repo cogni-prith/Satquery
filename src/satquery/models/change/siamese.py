@@ -1,6 +1,6 @@
 """Discriminative Siamese change head for CDVQA, plus the tool that serves it.
 
-Project doctrine, from CLAUDE.md: **do not route CDVQA through the VLM alone.**
+Project doctrine, from the architecture: **do not route CDVQA through the VLM alone.**
 CDVQA's answer set is closed over exactly six land-cover classes (`CDVQA_ANSWERS` in
 `preprocess/constants.py`). A shared-weight Siamese encoder over the two dates,
 followed by a small MLP classifier, beats a generative VLM on that closed set and

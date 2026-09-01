@@ -27,9 +27,9 @@ def test_band_roles_are_present_in_the_canonical_orders() -> None:
 
 
 def test_cdvqa_answer_set_is_the_full_19_value_vocabulary() -> None:
-    """Verified against the published annotations, not against CLAUDE.md's prose.
+    """Verified against the published annotations, not against the project's prose.
 
-    CLAUDE.md describes a six-class answer set. The actual data has 19 values across all
+    the architecture describes a six-class answer set. The actual data has 19 values across all
     four splits: the six land-cover classes cover only 23.4% of answers, with yes/no at
     52.2% and change-ratio buckets at 24.4%. A six-way head could not answer three
     quarters of the benchmark, so the ordering pinned here is the 19-value one, and it is
@@ -39,7 +39,7 @@ def test_cdvqa_answer_set_is_the_full_19_value_vocabulary() -> None:
     assert C.CDVQA_ANSWERS[:2] == ("no", "yes")
     assert set(C.CDVQA_LAND_COVER_ANSWERS) < set(C.CDVQA_ANSWERS)
     assert len(C.CDVQA_LAND_COVER_ANSWERS) == 6
-    # Dataset token spelling, not CLAUDE.md's prose spelling.
+    # Dataset token spelling, not the project's prose spelling.
     assert "NVG_surface" in C.CDVQA_ANSWERS
     assert "non-vegetated ground surface" not in C.CDVQA_ANSWERS
     # No duplicates: a repeated label would collapse two output units.

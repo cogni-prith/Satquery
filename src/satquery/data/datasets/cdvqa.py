@@ -10,7 +10,7 @@ The answers are **closed** over the six land-cover classes in
 retyped: that tuple is also the output-layer ordering of the discriminative change
 head, so a divergent copy would silently scramble a reloaded checkpoint.
 
-That closed answer set is also why CLAUDE.md routes CDVQA two ways. The scored
+That closed answer set is also why CDVQA is routed two ways. The scored
 answer comes from the Siamese classification head, which beats a generative VLM on
 a six-way choice and runs in milliseconds; the VLM handles free-form change
 description. This loader serves both -- it emits `TaskType.CHANGE_VQA` with
