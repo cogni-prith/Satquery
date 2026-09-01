@@ -205,7 +205,15 @@ class DeterministicIndexTool(BaseTool):
             answer=answer,
             evidence=evidence,
             confidence=self._confidence(record),
-            params_used={"indices": which, "classes": sorted(wanted)},
+            params_used={
+                "indices": which,
+                "classes": sorted(wanted),
+                # Names the class the highlight layer marks. The overlay is one class, not
+                # all of them, and a legend that cannot say which one is guessing.
+                "highlighted_class": self._headline_class(outputs, wanted)
+                if (outputs.get("masks") or outputs.get("masks_t1"))
+                else None,
+            },
             warnings=record.warnings,
             answer_record=record.model_dump(mode="json"),
         )
