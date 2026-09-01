@@ -131,3 +131,63 @@ def test_open_water_is_not_counted_as_built_up(tmp_path, tool) -> None:
     )
     assert delta["trend"] == "unchanged"
     assert "water" not in result.answer_record["area_deltas"], "only built-up was asked about"
+
+
+def _write_no_blue(path, lake: int):
+    """A four-band stack with no blue band — the ordinary B04/B03/B08/B11 case."""
+    green = np.full((SIDE, SIDE), 0.10, dtype=np.float32)
+    nir = np.full((SIDE, SIDE), 0.40, dtype=np.float32)
+    green[:lake, :lake] = 0.30
+    nir[:lake, :lake] = 0.05
+    with rasterio.open(
+        path, "w", driver="GTiff", height=SIDE, width=SIDE, count=4, dtype="float32",
+        crs="EPSG:32643", transform=from_origin(500000.0, 2000000.0, GSD, GSD),
+    ) as dst:
+        for index, (band, name) in enumerate(
+            [(np.full((SIDE, SIDE), 0.15, np.float32), "B04"), (green, "B03"),
+             (nir, "B08"), (np.full((SIDE, SIDE), 0.20, np.float32), "B11")],
+            start=1,
+        ):
+            dst.write(band, index)
+            dst.set_band_description(index, name)
+    return path
+
+
+def test_highlight_survives_a_stack_with_no_blue_band(tmp_path, tool) -> None:
+    """The highlight is a transparent layer over the imagery and needs no backdrop.
+
+    It once shared a try block with the tiles, so a raster with no B02 -- which only stops
+    the *backdrop* rendering -- discarded the highlight too, and the feature appeared to
+    work only on files that happened to carry blue.
+    """
+    refs = [
+        read_image_ref(_write_no_blue(tmp_path / "a.tif", 20)),
+        read_image_ref(_write_no_blue(tmp_path / "b.tif", 40)),
+    ]
+    result = tool.run(ToolRequest(query="what changed?", images=refs))
+    assert result.ok, result.error
+    assert result.evidence.highlight_path is not None, "highlight must not need a blue band"
+    assert result.evidence.highlight_path.exists()
+    # The false-colour fallback means the tiles render too, rather than being skipped.
+    assert result.evidence.mask_path is not None
+
+
+def test_highlight_marks_the_class_that_actually_changed(tmp_path, tool) -> None:
+    """Choosing the class alphabetically highlighted built-up on a scene where only the
+    water moved, producing an empty overlay on a visibly changed pair."""
+    refs = [
+        read_image_ref(_write(tmp_path / "a.tif", 20)),
+        read_image_ref(_write(tmp_path / "b.tif", 40)),
+    ]
+    result = tool.run(ToolRequest(query="what changed?", images=refs))
+    assert result.ok, result.error
+
+    from PIL import Image
+
+    highlight = np.array(Image.open(result.evidence.highlight_path))
+    assert highlight.shape[2] == 4, "the highlight must be RGBA to composite over imagery"
+    marked = int(np.count_nonzero(highlight[:, :, 3]))
+    expected = 40 * 40 - 20 * 20  # the water square growing
+    assert marked == pytest.approx(expected, rel=0.02), (
+        f"highlight marked {marked} px; the water change is {expected} px"
+    )

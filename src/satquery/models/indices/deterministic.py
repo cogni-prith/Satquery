@@ -196,7 +196,7 @@ class DeterministicIndexTool(BaseTool):
 
         record = build_record(intent, outputs, gsd_m)
         answer = verbalize(record)
-        evidence = self._render_evidence(request, outputs)
+        evidence = self._render_evidence(request, outputs, wanted)
 
         return ToolResult(
             request_id=request.request_id,
@@ -212,67 +212,156 @@ class DeterministicIndexTool(BaseTool):
 
     # -- evidence ---------------------------------------------------------------------
 
-    def _render_evidence(self, request: ToolRequest, outputs: dict) -> Evidence:
+    def _render_evidence(
+        self, request: ToolRequest, outputs: dict, wanted: set[str] | None = None
+    ) -> Evidence:
         """Write the maps behind the answer, so the number can be checked against pixels.
 
-        Rendering failures are swallowed deliberately: a missing picture must never turn a
-        correct measurement into a failed request. The answer stands on the record, and
-        the maps are corroboration.
+        Each artifact is attempted independently. An earlier version wrapped the whole
+        block in one try, so a raster with no blue band -- which only stops the *backdrop*
+        from rendering -- silently discarded the change map and the highlight too, and the
+        feature appeared to work only for files that happened to carry B02.
+
+        The highlight needs no backdrop at all: it is a transparent layer over the live
+        imagery, so it is written from the masks alone and survives a missing band.
         """
-        from satquery.models.base import load_model_input
         from satquery.utils.paths import artifact_dir
 
         evidence = Evidence()
-        try:
-            out = artifact_dir("serve", "evidence")
-            stem = request.request_id[:12]
-            base, _ = load_model_input(request.images[0])
+        out = artifact_dir("serve", "evidence")
+        stem = request.request_id[:12]
+        single = outputs.get("masks")
+        first, second = outputs.get("masks_t1"), outputs.get("masks_t2")
 
-            if "masks" in outputs:
-                evidence.overlay_path = write_png(
-                    out / f"{stem}_overlay.png",
-                    render_mask_overlay(base, outputs["masks"]),
-                )
-                # The class the question was about, as a transparent layer for the canvas.
-                first_class = next(iter(outputs["masks"]))
+        # -- the highlight, which depends on nothing but the masks ---------------------
+        try:
+            if single:
+                name = self._headline_class(outputs, wanted)
                 evidence.highlight_path = write_png(
                     out / f"{stem}_highlight.png",
-                    render_mask_alpha(
-                        outputs["masks"][first_class],
-                        rgb=CLASS_RGB.get(first_class, (56, 189, 248)),
-                    ),
+                    render_mask_alpha(single[name], rgb=CLASS_RGB.get(name, (56, 189, 248))),
                 )
-            elif "masks_t1" in outputs:
-                shared = sorted(set(outputs["masks_t1"]) & set(outputs["masks_t2"]))
-                if shared:
-                    name = shared[0]
-                    evidence.mask_path = write_png(
-                        out / f"{stem}_change.png",
-                        render_change_map(
-                            base, outputs["masks_t1"][name], outputs["masks_t2"][name]
-                        ),
-                    )
-                    evidence.highlight_path = write_png(
-                        out / f"{stem}_highlight.png",
-                        render_change_alpha(outputs["masks_t1"][name], outputs["masks_t2"][name]),
-                    )
-                    evidence.index_maps = {
-                        f"{name}_t1": write_png(
-                            out / f"{stem}_t1.png",
-                            render_mask_overlay(base, {name: outputs["masks_t1"][name]}),
-                        ),
-                        f"{name}_t2": write_png(
-                            out / f"{stem}_t2.png",
-                            render_mask_overlay(
-                                load_model_input(request.images[1])[0],
-                                {name: outputs["masks_t2"][name]},
-                            ),
-                        ),
-                    }
+            elif first and second:
+                name = self._headline_class(outputs, wanted)
+                evidence.highlight_path = write_png(
+                    out / f"{stem}_highlight.png",
+                    render_change_alpha(first[name], second[name]),
+                )
         except Exception as exc:  # a missing map must not fail a good answer
-            _LOG.warning("evidence rendering failed, answer is unaffected: %s", exc)
+            _LOG.warning("highlight rendering failed: %s", exc)
+
+        # -- the tiles, which need a backdrop ------------------------------------------
+        try:
+            base = self._display_base(request.images[0])
+        except Exception as exc:
+            _LOG.warning("no displayable backdrop, tiles skipped: %s", exc)
+            return evidence
+
+        try:
+            if single:
+                evidence.overlay_path = write_png(
+                    out / f"{stem}_overlay.png", render_mask_overlay(base, single)
+                )
+            elif first and second:
+                name = self._headline_class(outputs, wanted)
+                evidence.mask_path = write_png(
+                    out / f"{stem}_change.png",
+                    render_change_map(base, first[name], second[name]),
+                )
+                maps = {
+                    f"{name}_t1": write_png(
+                        out / f"{stem}_t1.png", render_mask_overlay(base, {name: first[name]})
+                    )
+                }
+                try:
+                    maps[f"{name}_t2"] = write_png(
+                        out / f"{stem}_t2.png",
+                        render_mask_overlay(
+                            self._display_base(request.images[1]), {name: second[name]}
+                        ),
+                    )
+                except Exception as exc:
+                    _LOG.warning("second-date tile skipped: %s", exc)
+                evidence.index_maps = maps
+        except Exception as exc:
+            _LOG.warning("tile rendering failed, answer is unaffected: %s", exc)
 
         return evidence
+
+    @staticmethod
+    def _display_base(ref) -> np.ndarray:
+        """An RGB backdrop for the evidence tiles, true colour where that is possible.
+
+        `load_model_input` is the frozen train/serve path and is left untouched -- it
+        refuses a stack with no blue band, correctly, because a model must not be fed a
+        silently different composite. A picture for a human has no such constraint, so
+        when true colour is unavailable this falls back to the standard false-colour
+        composite (NIR, red, green) that every remote sensing analyst reads, rather than
+        producing nothing.
+        """
+        from satquery.io.raster import read_raster
+        from satquery.models.base import load_model_input
+        from satquery.preprocess.optical import stretch_to_uint8
+
+        try:
+            return load_model_input(ref)[0]
+        except ValueError:
+            pass
+
+        array, parsed = read_raster(ref.path)
+        names = parsed.band_names
+        for combo in (("B08", "B04", "B03"), ("B11", "B08", "B04")):
+            if all(band in names for band in combo):
+                stack = np.stack([array[names.index(band)] for band in combo])
+                return np.ascontiguousarray(stretch_to_uint8(stack).transpose(1, 2, 0))
+
+        # Last resort: the first band, greyscale. Honest, and better than a blank tile.
+        single = stretch_to_uint8(array[:1])[0]
+        return np.repeat(single[:, :, np.newaxis], 3, axis=2)
+
+    @staticmethod
+    def _headline_class(outputs: dict, wanted: set[str] | None = None) -> str:
+        """The class the highlight should mark.
+
+        Three rules, in order.
+
+        The query wins. If it named exactly one class, that is what the person asked to
+        see, whatever else moved.
+
+        Otherwise the largest change, weighted by how far the index can be trusted. NDWI
+        is a reliable water detector and NDVI is decent, but NDBI cannot separate
+        impervious surface from dry bare soil and is reported as an upper bound everywhere
+        else in this system, so it ranks last here for consistency. On the Alentejo demo
+        pair built-up has *more* changed pixels than water -- 3910 against 3187 -- yet it
+        is the same physical event read through the weaker index: the reservoir bed is
+        bare in October and submerged in March. Marking it as the headline would point at
+        the one number the caveats tell the reader not to lean on.
+
+        Alphabetical order, which the first version used, highlighted `built_up` on a
+        scene where only the water moved and produced an empty overlay.
+        """
+        reliability = {"water": 1.0, "vegetation": 0.9, "built_up": 0.35}
+
+        first, second = outputs.get("masks_t1"), outputs.get("masks_t2")
+        available = (
+            sorted(set(first) & set(second)) if first and second else sorted(outputs["masks"])
+        )
+
+        if wanted and len(wanted) == 1:
+            only = next(iter(wanted))
+            if only in available:
+                return only
+
+        def moved(name: str) -> float:
+            if first and second:
+                count = np.count_nonzero(
+                    np.asarray(first[name], dtype=bool) ^ np.asarray(second[name], dtype=bool)
+                )
+            else:
+                count = np.count_nonzero(np.asarray(outputs["masks"][name], dtype=bool))
+            return float(count) * reliability.get(name, 0.5)
+
+        return max(available, key=moved)
 
     # -- helpers ----------------------------------------------------------------------
 
