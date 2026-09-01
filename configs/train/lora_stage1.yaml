@@ -67,8 +67,11 @@ logging_steps: 10
 eval_strategy: steps
 eval_steps: 500
 save_strategy: steps
-save_steps: 500
-save_total_limit: 4         # Raised from 2: the previous run peaked at an intermediate
+# 150 steps is ~35 minutes at the measured 13.6 s/step. 500 was ~1.9 hours, which
+# meant a laptop closed after an hour lost everything -- resume_from_checkpoint='auto'
+# can only resume from a checkpoint that exists.
+save_steps: 150
+save_total_limit: 6         # more frequent saves, so keep a few more
                             # checkpoint and came within one save of deleting it.
 dataloader_num_workers: 4
 # Samples carry raster fields the Trainer must not strip before the collator runs.
