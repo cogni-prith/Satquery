@@ -48,6 +48,7 @@ class ObjectDetectorTool(BaseTool):
         from satquery.symbolic.measures import object_count
 
         rgb, warnings = load_model_input(request.images[0])
+        height, width = rgb.shape[:2]
 
         from PIL import Image
 
@@ -82,14 +83,17 @@ class ObjectDetectorTool(BaseTool):
             name = self.vocabulary[index]
             if wanted and name not in wanted:
                 continue
-            # Back to the unit square: the detector saw a resized copy, and the caller's
-            # image is the original.
+            # Back to the CALLER'S pixel grid. The detector saw a square resize; the
+            # contract is absolute pixels on the original raster, because that is what
+            # VRSBench's acc@tau is scored against. Emitting the unit square here -- which
+            # an earlier version did -- put boxes on a different scale from
+            # vlm.grounding's, and anything consuming both drew one of them wrong.
             boxes.append(
                 BoundingBox(
-                    x_min=float(box[0] / self.size),
-                    y_min=float(box[1] / self.size),
-                    x_max=float(box[2] / self.size),
-                    y_max=float(box[3] / self.size),
+                    x_min=float(box[0] / self.size * width),
+                    y_min=float(box[1] / self.size * height),
+                    x_max=float(box[2] / self.size * width),
+                    y_max=float(box[3] / self.size * height),
                     label=name,
                     score=float(score),
                     image_index=0,
