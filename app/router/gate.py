@@ -1,7 +1,7 @@
 """Stage one of the router: the deterministic gate.
 
 Parsed raster metadata narrows the candidate tool set. This is a lookup, not a model, and
-it always succeeds -- `CLAUDE.md` is explicit that the router is two staged steps rather
+it always succeeds -- `the architecture` is explicit that the router is two staged steps rather
 than a free-form ReAct loop, and that the registry specs must be rich enough for the gate
 to be a lookup table rather than a guess.
 

@@ -1,6 +1,6 @@
 """Stage two of the router: choosing one tool from the gate's candidates.
 
-Keyword scoring against the query, with a deterministic fallback. `CLAUDE.md` describes
+Keyword scoring against the query, with a deterministic fallback. the architecture describes
 stage two as a constrained classification against a Pydantic schema with one retry then a
 keyword fallback; the LLM call is deferred and the keyword path is the implementation.
 That is a considered trade, not a shortcut: the gate usually narrows to one to three
