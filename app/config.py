@@ -28,12 +28,22 @@ class Settings:
     cors_origins: tuple[str, ...] = ("http://localhost:5173", "http://127.0.0.1:5173")
     """Vite's dev server. The frontend is served separately."""
 
+    demo_dir: Path | None = None
+    """Directory of bundled demo rasters, or None when none is installed.
+
+    Optional on purpose: the service must start and work with no demo scene present, so
+    a missing directory is a 404 on one endpoint rather than a failure at boot."""
+
     @classmethod
     def from_env(cls) -> Settings:
         root = os.environ.get("SATQUERY_UPLOAD_ROOT")
         upload_root = Path(root).expanduser() if root else Path.home() / "satquery-uploads"
         upload_root.mkdir(parents=True, exist_ok=True)
-        return cls(upload_root=upload_root)
+        demo = os.environ.get("SATQUERY_DEMO_DIR")
+        return cls(
+            upload_root=upload_root,
+            demo_dir=Path(demo).expanduser() if demo else None,
+        )
 
 
 SETTINGS = Settings.from_env()
