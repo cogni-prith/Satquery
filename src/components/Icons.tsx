@@ -41,3 +41,25 @@ export const IconTable = () => (
 export const IconGlobe = () => (
   <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18Z" /></svg>
 )
+
+export const IconQuestion = () => (
+  <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.4-2.8 4M12 17.5h.01" /></svg>
+)
+export const IconCaption = () => (
+  <svg {...base}><rect x="3" y="4.5" width="18" height="15" rx="2.5" /><path d="M7 14.5l3.2-3.6 2.4 2.6 2-2.2L17 14.5" /><circle cx="9" cy="9" r="1.2" /></svg>
+)
+export const IconChange = () => (
+  <svg {...base}><path d="M3 17.5 9 11l3.5 3.5L21 6" /><path d="M21 11V6h-5" /></svg>
+)
+export const IconFusion = () => (
+  <svg {...base}><circle cx="9.5" cy="12" r="5.5" /><circle cx="14.5" cy="12" r="5.5" /></svg>
+)
+export const IconTarget = () => (
+  <svg {...base}><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="3.5" /></svg>
+)
+export const IconRuler = () => (
+  <svg {...base}><rect x="2.5" y="8" width="19" height="8" rx="1.5" /><path d="M7 8v3M11 8v4M15 8v3M19 8v4" /></svg>
+)
+export const IconClock = () => (
+  <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 7v5.2l3.2 2" /></svg>
+)
