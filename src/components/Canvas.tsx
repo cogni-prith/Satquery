@@ -125,10 +125,21 @@ export function Canvas({
           <img className="layer highlight" src={`/api/images/evidence/${highlight}`} alt="" />
         )}
 
+        {/* The legend has to carry the outline, not just the fill. A red blob alone
+            cannot say what it was measured against: on a reservoir that only filled, the
+            changed region IS most of the final lake, and the overlay reads as "you have
+            drawn the water" until the old shoreline is named. */}
         {highlight && (
           <div className="frame-legend">
-            <span className="swatch" />
-            {pair ? 'changed area' : 'measured area'}
+            {pair ? (
+              <>
+                <span className="key"><i className="sw gained" /> gained</span>
+                <span className="key"><i className="sw lost" /> lost</span>
+                <span className="key"><i className="sw rim" /> extent at date 1</span>
+              </>
+            ) : (
+              <span className="key"><i className="sw gained" /> measured area</span>
+            )}
           </div>
         )}
 

@@ -982,9 +982,15 @@ kbd { font-family: var(--mono); font-size: 9.5px; padding: 1px 4px; border-radiu
   border: 1px solid var(--line-bright); color: var(--ink-2);
   pointer-events: none;
 }
-.frame-legend .swatch {
-  width: 9px; height: 9px; border-radius: 3px; flex: none;
-  background: #ff3e4e; box-shadow: 0 0 9px rgba(255,62,78,0.85);
+.frame-legend { gap: 12px; }
+.frame-legend .key { display: inline-flex; align-items: center; gap: 6px; }
+.frame-legend .sw { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.frame-legend .sw.gained { background: #ff3e4e; box-shadow: 0 0 9px rgba(255,62,78,0.85); }
+.frame-legend .sw.lost   { background: #ffb020; box-shadow: 0 0 9px rgba(255,176,32,0.8); }
+/* The shoreline is a line in the overlay, so its key is a line too. */
+.frame-legend .sw.rim {
+  height: 2px; border-radius: 1px; width: 11px;
+  background: #fff; box-shadow: 0 0 7px rgba(255,255,255,0.9);
 }
 .ghost-btn.on { border-color: var(--accent); color: var(--ink); background: rgba(91,140,255,0.18); }
 
