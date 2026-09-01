@@ -130,3 +130,21 @@ async def preview(image_id: str) -> Response:
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+@router.get("/evidence/{name}")
+async def evidence(name: str) -> Response:
+    """Serve one rendered evidence map by filename.
+
+    The tools write these under the artifact root, which is outside this service's
+    directory, so they cannot be mounted as static files without exposing the whole tree.
+    The name is checked against the resolved directory rather than sanitised by pattern,
+    because a rejected path traversal is easier to get right than a clever filter.
+    """
+    from satquery.utils.paths import artifact_dir
+
+    root = artifact_dir("serve", "evidence").resolve()
+    target = (root / name).resolve()
+    if not target.is_file() or root not in target.parents:
+        raise HTTPException(status_code=404, detail=f"no evidence map named {name!r}")
+    return Response(content=target.read_bytes(), media_type="image/png")
