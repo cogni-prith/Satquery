@@ -22,6 +22,8 @@ CLASS_RGB: dict[str, tuple[int, int, int]] = {
     "water": (56, 189, 248),
     "built_up": (251, 191, 36),
     "vegetation": (74, 222, 128),
+    # Not a land-cover class: the region a radiometric comparison flagged as different.
+    "changed": (255, 62, 78),
 }
 GAINED_RGB = (52, 211, 153)
 LOST_RGB = (251, 113, 133)

@@ -252,6 +252,41 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         implemented=False,
     ),
     ToolSpec(
+        name="change.radiometric",
+        version="0.1.0",
+        task=TaskType.CHANGE_MASK,
+        # The only tool here that accepts plain RGB, because it is the only one that does
+        # not need a spectral index. A screenshot has no near-infrared and therefore no
+        # NDWI, NDBI or NDVI -- but two screenshots of one place can still be differenced.
+        accepted_modalities=[Modality.OPTICAL_RGB, Modality.MULTISPECTRAL, Modality.PANCHROMATIC],
+        accepted_input_configs=[InputConfig.BI_TEMPORAL_PAIR],
+        min_gsd_m=None,
+        max_gsd_m=None,
+        param_schema={
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "threshold": {
+                    "type": "number",
+                    "minimum": 0.05,
+                    "maximum": 3.0,
+                    "description": "Distance in normalised RGB space above which a pixel changed.",
+                },
+                "min_component_px": {"type": "integer", "minimum": 1, "default": 12},
+            },
+        },
+        returns=["answer", "evidence.mask_path", "evidence.highlight_path", "confidence"],
+        description=(
+            "Radiometric change detection on a co-registered pair, for imagery with no "
+            "near-infrared band. Reports WHERE the scene differs, never what it changed "
+            "into: it cannot separate new construction from bare soil, a wet surface or a "
+            "different sun angle. A screening instrument, deliberately weaker than the "
+            "spectral path and labelled as such."
+        ),
+        requires_gpu=False,
+        implemented=True,
+    ),
+    ToolSpec(
         name="indices.deterministic",
         version="0.1.0",
         task=TaskType.FUSION_EXTRACTION,

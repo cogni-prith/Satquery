@@ -42,6 +42,7 @@ __all__ = [
     "CORINE_LEVEL1_WATER",
     "DB_EPS",
     "DB_SCALE",
+    "EXCESS_GREEN_THRESHOLD",
     "FUSION_CLASS_INDEX",
     "FUSION_EXTRACTION_CLASSES",
     "FUSION_MASK_BACKGROUND",
@@ -72,6 +73,8 @@ __all__ = [
     "REBEN_PATCH_EXTENT_M",
     "REBEN_SAR_DB_RANGE",
     "REBEN_SAR_UNITS",
+    "RGB_CHANGE_DISTANCE_THRESHOLD",
+    "RGB_CHANGE_MIN_COMPONENT_PX",
     "SAR_PSEUDO_RGB_LAYOUT",
     "SAR_SINGLE_POL_WARNING",
     "SAR_WATER_DB_THRESHOLD",
@@ -204,6 +207,45 @@ INDEX_EPS: Final[float] = 1e-6
 NDWI_WATER_THRESHOLD: Final[float] = 0.0
 NDBI_BUILTUP_THRESHOLD: Final[float] = 0.0
 NDVI_VEGETATION_THRESHOLD: Final[float] = 0.2
+
+# ── RGB-only change detection ─────────────────────────────────────────────────────
+#
+# For imagery with no near-infrared band -- a screenshot, a JPEG, an aerial RGB tile --
+# no spectral index applies and no class can be named. What remains is radiometric: a
+# pixel whose colour moved a lot between two dates changed, whatever it changed into.
+#
+# This is a genuinely weaker instrument and is reported as such. It says WHERE, never
+# WHAT, and it cannot tell a new building from a ploughed field from a cloud shadow.
+
+#: FLOOR on the change distance, not the operating threshold.
+#:
+#: The threshold itself is found per pair by Otsu, because no fixed distance transfers.
+#: Measured across real SECOND pairs the median per-pixel distance ran from 0.8 to 2.2 and
+#: the 99th percentile from 5.5 to 18: two acquisitions disagree by an amount set by how
+#: far apart they are in time, the season, the sun angle and the sensor. This constant was
+#: originally the threshold, reasoned from the geometry of the normalised space rather
+#: than checked against imagery, and it sat *below the median* on real data -- it flagged
+#: 90% of every scene as changed.
+#:
+#: It survives as a floor, and the floor does real work: Otsu always finds a split, even
+#: in a distribution that is entirely noise, so a genuinely unchanged pair would otherwise
+#: come back with a confident partition of its own sensor noise.
+RGB_CHANGE_DISTANCE_THRESHOLD: Final[float] = 0.35
+
+#: Connected components smaller than this are dropped from the RGB change mask.
+#:
+#: Radiometric differencing is noisy in a way index thresholding is not: compression
+#: artefacts, resampling and a one-pixel registration error all fire it. Requiring a
+#: contiguous patch removes the speckle that would otherwise dominate the count.
+RGB_CHANGE_MIN_COMPONENT_PX: Final[int] = 12
+
+#: Excess Green: 2G - R - B, a vegetation proxy for imagery with no NIR.
+#:
+#: Woebbecke et al. 1995. Far weaker than NDVI -- it separates green things from
+#: non-green things, which is not the same as separating live vegetation from anything
+#: painted green -- so it is used to describe an RGB change, never to measure vegetation
+#: area on its own.
+EXCESS_GREEN_THRESHOLD: Final[float] = 0.08
 
 # --------------------------------------------------------------------------------------
 # Pan-sharpening

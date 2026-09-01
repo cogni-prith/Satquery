@@ -104,7 +104,36 @@ def _regions(record: AnswerRecord) -> str:
     return text + "."
 
 
+def _radiometric_change(record: AnswerRecord) -> str:
+    """Word a radiometric comparison, stating its limit in the same breath.
+
+    The hedge is not politeness. Without it the sentence reads as a land-cover result and
+    the number is not one: this measurement locates where two images differ and cannot say
+    what the difference is.
+    """
+    share = record.class_proportions.get("changed", 0.0)
+    if share < 0.01:
+        return (
+            "The two images are radiometrically almost identical: under 1% of the scene "
+            "differs. This compares appearance only, so a change that did not alter how "
+            "the scene looks would not be found."
+        )
+
+    area = record.fact("changed_area")
+    measured = (
+        f"{_area(float(area.value))} ({_percent(share)} of the scene)"
+        if area is not None
+        else f"{_percent(share)} of the scene"
+    )
+    return (
+        f"{measured} changed appearance between the two dates. This is radiometric change "
+        "detection on imagery with no near-infrared band: it locates where the scene "
+        "differs but cannot say what it changed into."
+    )
+
+
 _FAMILIES = {
+    "radiometric_change": _radiometric_change,
     "change_trend": _change_trend,
     "land_cover": _proportions,
     "count": _counts,
