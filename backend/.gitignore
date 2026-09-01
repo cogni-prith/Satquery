@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Uploaded rasters. User data, and large; the BlobStore root is configurable and should
+# never live inside the repo in a real deployment either.
+uploads/
+*.tif
+*.tiff
