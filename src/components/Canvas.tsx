@@ -165,20 +165,25 @@ export function Canvas({
             drawn the water" until the old shoreline is named. */}
         {highlight && (
           <div className="frame-legend">
-            {pair ? (
+            {/* Gained/lost is a claim only the spectral path can make. The radiometric
+                fallback marks where the scene differs and cannot say in which direction,
+                so on a pair with no class it gets the one label it has earned. */}
+            {pair && gainedLost ? (
               <>
-                {gainedLost?.klass && <span className="key klass">{gainedLost.klass.replace(/_/g, ' ')}</span>}
-                <span className="key"><i className="sw gained" /> gained{fmtArea(gainedLost?.gained)}</span>
+                {gainedLost.klass && <span className="key klass">{gainedLost.klass.replace(/_/g, ' ')}</span>}
+                <span className="key"><i className="sw gained" /> gained{fmtArea(gainedLost.gained)}</span>
                 {/* The zero is printed rather than the row hidden. A scene where nothing
                     was lost is a finding; a legend that quietly drops the category looks
                     like the overlay failed to draw it. */}
-                <span className={`key ${gainedLost?.lost === 0 ? 'nil' : ''}`}>
-                  <i className="sw lost" /> lost{fmtArea(gainedLost?.lost)}
+                <span className={`key ${gainedLost.lost === 0 ? 'nil' : ''}`}>
+                  <i className="sw lost" /> lost{fmtArea(gainedLost.lost)}
                 </span>
                 <span className="key"><i className="sw rim" /> extent at date 1</span>
               </>
             ) : (
-              <span className="key"><i className="sw gained" /> measured area</span>
+              <span className="key">
+                <i className="sw gained" /> {pair ? 'changed appearance' : 'measured area'}
+              </span>
             )}
           </div>
         )}
