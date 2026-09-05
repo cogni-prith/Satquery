@@ -111,7 +111,7 @@ export function Canvas({
       <div
         className={`frame ${pair ? 'is-pair' : ''}`}
         ref={frame}
-        style={{ aspectRatio: String(ratio) }}
+        style={{ aspectRatio: String(ratio), ['--ar' as string]: String(ratio) }}
       >
         <img className="layer" src={`/api/images/${images[0].image_id}/preview`} alt={images[0].filename} />
         <div className="layer-boxes">{overlay(0)}</div>
