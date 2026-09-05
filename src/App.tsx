@@ -106,7 +106,6 @@ export default function App() {
   }
 
   const result = job?.result ?? null
-  const warnings = result?.warnings ?? []
   const jobError = job?.error ?? result?.error ?? null
   const canRun = ready && !busy && query.trim().length > 0 && images.length > 0
 
@@ -320,21 +319,6 @@ export default function App() {
                         </div>
                         <div className="result-side">
                           {result.answer_record && <RecordPanel record={result.answer_record} />}
-                          {warnings.length > 0 && (
-                            <section className="card">
-                              <header className="card-head">
-                                <span className="card-title"><IconWarn /> caveats</span>
-                                <span className="chip">{warnings.length}</span>
-                              </header>
-                              <div className="note-list">
-                                {warnings.map((warning, index) => (
-                                  <div className="note note-warn" key={index} style={{ animationDelay: `${index * 55}ms` }}>
-                                    <IconWarn /><div>{warning}</div>
-                                  </div>
-                                ))}
-                              </div>
-                            </section>
-                          )}
                           <TracePanel trace={job?.trace ?? null} running={busy} />
                         </div>
                       </div>
