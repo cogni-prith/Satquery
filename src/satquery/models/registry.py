@@ -239,12 +239,21 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         ),
         requires_gpu=True,
         implemented=True,
+        # Above change.radiometric, below change.mask. On an RGB pair, where the segmenter
+        # cannot run, this head was trained on exactly that input and names what changed,
+        # while the radiometric fallback can only say where the scene differs.
+        preference=5,
     ),
     ToolSpec(
         name="change.mask",
         version="0.1.0",
         task=TaskType.CHANGE_MASK,
-        accepted_modalities=_OPTICAL,
+        # Multispectral only, matching seg.landcover, which this is composed from: the
+        # segmenter reads B02/B03/B04/B08 and a three-band RGB raster carries none of them.
+        # Declaring _OPTICAL here made the gate offer this tool for an RGB pair and the
+        # segmenter raise on the missing bands -- a capability gap surfacing as a crash
+        # instead of as a tool the gate never proposed.
+        accepted_modalities=[Modality.MULTISPECTRAL],
         accepted_input_configs=[InputConfig.BI_TEMPORAL_PAIR],
         min_gsd_m=_MIN_GSD_M,
         max_gsd_m=30.0,
@@ -255,10 +264,24 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
                 "threshold": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5}
             },
         },
-        returns=["evidence.mask_path", "evidence.overlay_path", "confidence"],
-        description="Pixel-level binary change mask. Optional per the problem statement.",
+        returns=[
+            "answer",
+            "evidence.mask_path",
+            "evidence.highlight_path",
+            "confidence",
+        ],
+        description=(
+            "Per-class change measured by segmenting both dates and differencing. Reports "
+            "the area each class gained or lost in hectares and marks the changed pixels, "
+            "so the answer is a quantity with a map behind it."
+        ),
         requires_gpu=True,
         implemented=True,
+        # Preferred over change.vqa_head wherever both are legal. Both answer a change
+        # question, but the head classifies into one of nineteen buckets ("10_to_20") and
+        # returns no evidence, while this measures hectares and marks the pixels it counted.
+        # The head stays reachable above 30 m GSD, where the segmenter is out of range.
+        preference=10,
     ),
     ToolSpec(
         name="fusion.extraction",
