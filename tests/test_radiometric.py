@@ -64,16 +64,41 @@ def test_normalisation_is_robust_to_the_change_it_is_looking_for() -> None:
     assert mask.mean() < 0.25, f"{mask.mean():.0%} of the scene flagged for an 11% block"
 
 
-def test_misaligned_images_are_refused(tmp_path, tool) -> None:
-    """Pixel-to-pixel differencing cannot align anything, so it must say so."""
-    small = np.zeros((40, 40, 3), dtype=np.uint8)
+def _write_sized(path, side: int, crs: str | None = None):
+    """A raster of an arbitrary size, optionally georeferenced."""
+    extra = (
+        {"crs": crs, "transform": rasterio.transform.from_origin(0, 0, 10, 10)}
+        if crs is not None
+        else {}
+    )
     with rasterio.open(
-        tmp_path / "small.tif", "w", driver="GTiff", height=40, width=40, count=3, dtype="uint8"
+        path, "w", driver="GTiff", height=side, width=side, count=3, dtype="uint8", **extra
     ) as dst:
-        dst.write(small.transpose(2, 0, 1))
+        dst.write(np.zeros((3, side, side), dtype="uint8"))
+    return path
+
+
+def test_two_hand_cropped_screenshots_are_fitted_and_say_so(tmp_path, tool) -> None:
+    """The imagery people actually upload: two crops of one place, sizes not equal.
+
+    Refusing was correct and useless -- it hands the alignment back to the person who came
+    here to avoid doing it. Neither raster is georeferenced, so there is no measured
+    alignment to protect, and the fit is done and declared.
+    """
     refs = [
         read_image_ref(_write_rgb(tmp_path / "a.tif", _scene())),
-        read_image_ref(tmp_path / "small.tif"),
+        read_image_ref(_write_sized(tmp_path / "small.tif", 40)),
+    ]
+    result = tool.run(ToolRequest(query="what changed", images=refs))
+    assert result.ok, result.error
+    assert any("scaled onto" in w for w in result.warnings), result.warnings
+
+
+def test_a_georeferenced_mismatch_is_still_refused(tmp_path, tool) -> None:
+    """With a CRS the misalignment is measurable, so fitting frames would discard it."""
+    refs = [
+        read_image_ref(_write_sized(tmp_path / "geo.tif", 120, crs="EPSG:32643")),
+        read_image_ref(_write_sized(tmp_path / "small.tif", 40)),
     ]
     result = tool.run(ToolRequest(query="what changed", images=refs))
     assert not result.ok

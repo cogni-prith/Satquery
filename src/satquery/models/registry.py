@@ -239,10 +239,11 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         ),
         requires_gpu=True,
         implemented=True,
-        # Above change.radiometric, below change.mask. On an RGB pair, where the segmenter
-        # cannot run, this head was trained on exactly that input and names what changed,
-        # while the radiometric fallback can only say where the scene differs.
-        preference=5,
+        # Last of the three change tools. It names what changed from a closed six-class
+        # set, which reads well, but it returns one label and no evidence -- no mask, no
+        # highlight, no area. On an RGB pair the radiometric path measures the changed
+        # share and draws it, and a figure with a picture behind it beats a bare label.
+        preference=1,
     ),
     ToolSpec(
         name="change.mask",
@@ -382,6 +383,11 @@ BUILTIN_SPECS: tuple[ToolSpec, ...] = (
         ),
         requires_gpu=False,
         implemented=True,
+        # Below change.mask, above change.vqa_head. This is the only change tool that runs
+        # on a plain RGB pair AND returns evidence, so on the imagery a person actually
+        # uploads -- a PNG with no near-infrared -- it is what puts the changed region on
+        # screen. It refuses to name the class, and says so in the answer.
+        preference=5,
     ),
     ToolSpec(
         name="indices.deterministic",
