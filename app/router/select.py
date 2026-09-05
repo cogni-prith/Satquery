@@ -18,9 +18,16 @@ from satquery.serve.contracts import TaskType, ToolSpec
 #: "Describe the change" contains "change", which is a CHANGE_VQA signal, and "describe",
 #: which is a CHANGE_DESCRIPTION one; a flat count ties and the tie-break is registry order,
 #: which is arbitrary. An explicit request for prose has to outrank an incidental noun.
+_QUANTITATIVE_CHANGE = ("did ", "how much", "what percentage", "increase", "decrease", "is there", "are there")
+
 _STRONG: dict[TaskType, tuple[str, ...]] = {
     TaskType.CHANGE_DESCRIPTION: ("describe", "explain", "summarise", "summarize", "in detail", "tell me about", "what happened"),
-    TaskType.CHANGE_VQA: ("did ", "how much", "what percentage", "increase", "decrease", "is there", "are there"),
+    TaskType.CHANGE_VQA: _QUANTITATIVE_CHANGE,
+    # Same terms as CHANGE_VQA on purpose. Both tasks answer "how much changed", so on a
+    # quantitative question they tie and `preference` decides -- which is where the choice
+    # between a measurement and a bucket label belongs. Scoring them differently here would
+    # hide that decision inside a keyword table.
+    TaskType.CHANGE_MASK: _QUANTITATIVE_CHANGE,
 }
 
 #: Query terms that signal each task. Ordered by how strongly they discriminate.
@@ -29,6 +36,7 @@ _SIGNALS: dict[TaskType, tuple[str, ...]] = {
     TaskType.CAPTION: ("describe", "caption", "what is in", "what do you see", "summarise", "summarize"),
     TaskType.CHANGE_VQA: ("change", "changed", "difference", "before", "after", "increase", "decrease"),
     TaskType.CHANGE_DESCRIPTION: ("change", "changed", "difference", "before", "after"),
+    TaskType.CHANGE_MASK: ("change", "changed", "difference", "before", "after", "increase", "decrease"),
     TaskType.FUSION_EXTRACTION: ("extract", "built-up", "built up", "water", "urban", "flood", "sar"),
     TaskType.VQA: ("how many", "what colour", "what color", "is there", "are there", "count", "?"),
 }
@@ -48,10 +56,12 @@ def vocabulary_match(spec: ToolSpec, query: str) -> int:
     vocabulary is boosted when the query names a term in it and penalised when it does
     not, so an open-ended sibling takes the query instead.
     """
-    if not spec.vocabulary:
+    # Also absent from the v1 ToolSpec, where every tool is open-ended.
+    vocabulary = getattr(spec, "vocabulary", None)
+    if not vocabulary:
         return 0
     text = query.lower()
-    for name in spec.vocabulary:
+    for name in vocabulary:
         spaced = name.replace("-", " ")
         if spaced in text or name in text or f"{spaced}s" in text:
             return 4

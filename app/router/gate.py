@@ -64,8 +64,10 @@ def gate(images: list[ImageRef], task: TaskType | None = None) -> tuple[InputCon
     ]
     # Highest preference first. Where a learned tool and its deterministic fallback are
     # both legal, the choice must be stated on the spec rather than fall out of whichever
-    # name happens to sort first.
-    candidates.sort(key=lambda spec: spec.preference, reverse=True)
+    # name happens to sort first. `preference` exists only on the v2 ToolSpec, and this
+    # service is meant to run against either package, so its absence means "no stated
+    # preference" rather than a crash.
+    candidates.sort(key=lambda spec: getattr(spec, "preference", 0), reverse=True)
     return config, candidates
 
 
