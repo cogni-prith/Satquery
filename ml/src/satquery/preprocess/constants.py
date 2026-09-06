@@ -80,6 +80,7 @@ __all__ = [
     "REBEN_SAR_UNITS",
     "RGB_CHANGE_DISTANCE_THRESHOLD",
     "RGB_CHANGE_MIN_COMPONENT_PX",
+    "RGB_CHANGE_MIN_SEPARABILITY",
     "SAR_PSEUDO_RGB_LAYOUT",
     "SAR_SINGLE_POL_WARNING",
     "SAR_WATER_DB_THRESHOLD",
@@ -236,6 +237,21 @@ NDVI_VEGETATION_THRESHOLD: Final[float] = 0.2
 #: in a distribution that is entirely noise, so a genuinely unchanged pair would otherwise
 #: come back with a confident partition of its own sensor noise.
 RGB_CHANGE_DISTANCE_THRESHOLD: Final[float] = 0.35
+
+#: Otsu separability below which the adaptive change threshold is not a measurement.
+#:
+#: Otsu returns a split for any distribution, including one with a single mode, where it
+#: simply slices off a tail. Separability (eta: between-class variance over total) says
+#: whether two populations were actually there. Measured on distance distributions: a
+#: clean bimodal pair reads 0.99, a real but faint 5% change 0.88, pure unimodal noise
+#: 0.68, and a scene redeveloped end to end -- no unchanged population to form the lower
+#: mode -- 0.67, where Otsu landed on the 80th percentile and marked only rooftops while
+#: the rest of the genuine change fell under the cut.
+#:
+#: 0.80 sits in the gap. Below it the reported share is a lower bound and says so; it does
+#: not change the threshold, because tuning a number until the picture looks right is how
+#: a screening tool starts inventing measurements.
+RGB_CHANGE_MIN_SEPARABILITY: Final[float] = 0.80
 
 #: Connected components smaller than this are dropped from the RGB change mask.
 #:
@@ -554,6 +570,7 @@ FINGERPRINT_EXCLUDED: Final[frozenset[str]] = frozenset(
         "FINGERPRINT_SCOPES",
         "RGB_CHANGE_DISTANCE_THRESHOLD",
         "RGB_CHANGE_MIN_COMPONENT_PX",
+        "RGB_CHANGE_MIN_SEPARABILITY",
     }
 )
 

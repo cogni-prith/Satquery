@@ -9,7 +9,8 @@ import rasterio
 from satquery.io.raster import read_image_ref
 from satquery.models.indices.radiometric import RadiometricChangeTool
 from satquery.models.registry import REGISTRY
-from satquery.preprocess.rgb_change import rgb_change_mask
+from satquery.preprocess.constants import RGB_CHANGE_MIN_SEPARABILITY
+from satquery.preprocess.rgb_change import otsu_split, rgb_change_mask
 from satquery.serve.contracts import ToolRequest
 
 SIDE = 120
@@ -64,16 +65,41 @@ def test_normalisation_is_robust_to_the_change_it_is_looking_for() -> None:
     assert mask.mean() < 0.25, f"{mask.mean():.0%} of the scene flagged for an 11% block"
 
 
-def test_misaligned_images_are_refused(tmp_path, tool) -> None:
-    """Pixel-to-pixel differencing cannot align anything, so it must say so."""
-    small = np.zeros((40, 40, 3), dtype=np.uint8)
+def _write_sized(path, side: int, crs: str | None = None):
+    """A raster of an arbitrary size, optionally georeferenced."""
+    extra = (
+        {"crs": crs, "transform": rasterio.transform.from_origin(0, 0, 10, 10)}
+        if crs is not None
+        else {}
+    )
     with rasterio.open(
-        tmp_path / "small.tif", "w", driver="GTiff", height=40, width=40, count=3, dtype="uint8"
+        path, "w", driver="GTiff", height=side, width=side, count=3, dtype="uint8", **extra
     ) as dst:
-        dst.write(small.transpose(2, 0, 1))
+        dst.write(np.zeros((3, side, side), dtype="uint8"))
+    return path
+
+
+def test_two_hand_cropped_screenshots_are_fitted_and_say_so(tmp_path, tool) -> None:
+    """The imagery people actually upload: two crops of one place, sizes not equal.
+
+    Refusing was correct and useless -- it hands the alignment back to the person who came
+    here to avoid doing it. Neither raster is georeferenced, so there is no measured
+    alignment to protect, and the fit is done and declared.
+    """
     refs = [
         read_image_ref(_write_rgb(tmp_path / "a.tif", _scene())),
-        read_image_ref(tmp_path / "small.tif"),
+        read_image_ref(_write_sized(tmp_path / "small.tif", 40)),
+    ]
+    result = tool.run(ToolRequest(query="what changed", images=refs))
+    assert result.ok, result.error
+    assert any("scaled onto" in w for w in result.warnings), result.warnings
+
+
+def test_a_georeferenced_mismatch_is_still_refused(tmp_path, tool) -> None:
+    """With a CRS the misalignment is measurable, so fitting frames would discard it."""
+    refs = [
+        read_image_ref(_write_sized(tmp_path / "geo.tif", 120, crs="EPSG:32643")),
+        read_image_ref(_write_sized(tmp_path / "small.tif", 40)),
     ]
     result = tool.run(ToolRequest(query="what changed", images=refs))
     assert not result.ok
@@ -153,3 +179,48 @@ def test_the_tool_uses_the_adaptive_threshold_by_default(tmp_path, tool) -> None
     assert result.ok, result.error
     assert result.params_used["threshold"] == "otsu (per pair)"
     assert result.answer_record["class_proportions"]["changed"] < 0.35
+
+
+def test_a_clean_change_is_separable_and_carries_no_lower_bound_caveat() -> None:
+    """A block change against a stable background is what Otsu is built for: two
+    populations genuinely present, so the threshold is a measurement and must not be
+    hedged. Hedging every result would make the caveat worthless."""
+    base = _scene()
+    changed = base.copy()
+    changed[20:50, 20:50] = [230, 30, 30]
+    _, warnings = rgb_change_mask(base, changed)
+    assert not any("LOWER BOUND" in warning for warning in warnings)
+
+
+def test_a_scene_that_changed_everywhere_reports_a_lower_bound() -> None:
+    """The failure this guards: with no unchanged population there is no lower mode for
+    Otsu to find, so it slices off a tail and reports a fraction of the real change as
+    the whole of it. The number stays as measured -- tuning it until the picture looks
+    right is how a screening tool starts inventing measurements -- but it must not be
+    presented as the changed share when it is a floor under it."""
+    rng = np.random.default_rng(0)
+    before = rng.integers(0, 255, size=(96, 96, 3)).astype(np.float64)
+    after = rng.integers(0, 255, size=(96, 96, 3)).astype(np.float64)
+    _, warnings = rgb_change_mask(before, after)
+    assert any("LOWER BOUND" in warning for warning in warnings)
+
+
+def test_separability_ranks_a_real_split_above_a_single_mode() -> None:
+    """The cutoff is only meaningful if the statistic orders these two cases correctly."""
+    rng = np.random.default_rng(1)
+    bimodal = np.concatenate([rng.normal(1.0, 0.3, 80_000), rng.normal(8.0, 0.5, 20_000)])
+    unimodal = np.abs(rng.normal(0.0, 2.0, 100_000))
+    _, clean = otsu_split(bimodal)
+    _, muddy = otsu_split(unimodal)
+    assert clean > RGB_CHANGE_MIN_SEPARABILITY > muddy
+
+
+def test_an_explicit_threshold_is_not_second_guessed() -> None:
+    """Separability describes a split Otsu chose. A caller who supplied their own number
+    has already made that judgement, and warning about a statistic never consulted would
+    be noise."""
+    base = _scene()
+    changed = base.copy()
+    changed[20:50, 20:50] = [230, 30, 30]
+    _, warnings = rgb_change_mask(base, changed, threshold=1.5)
+    assert not any("separability" in warning for warning in warnings)

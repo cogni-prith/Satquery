@@ -23,6 +23,7 @@ import numpy as np
 from satquery.preprocess.constants import (
     RGB_CHANGE_DISTANCE_THRESHOLD,
     RGB_CHANGE_MIN_COMPONENT_PX,
+    RGB_CHANGE_MIN_SEPARABILITY,
 )
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "excess_green",
     "match_histogram",
     "normalise_rgb",
+    "otsu_split",
     "otsu_threshold",
     "rgb_change_mask",
 ]
@@ -103,6 +105,29 @@ def normalise_rgb(rgb: np.ndarray) -> np.ndarray:
     return out
 
 
+def otsu_split(values: np.ndarray, bins: int = 256) -> tuple[float, float]:
+    """Otsu's threshold plus its separability -- how much the split is worth believing.
+
+    Otsu always returns a number. On a unimodal distribution that number is meaningless:
+    there are no two populations to separate, so it slices off a tail and calls it the
+    changed class. A scene that was redeveloped end to end has exactly that shape -- no
+    unchanged population to sit as the lower mode -- and the threshold lands near the
+    80th percentile, marking only the highest-contrast pixels while everything else that
+    genuinely changed stays under the cut.
+
+    Separability is the standard Otsu criterion eta: between-class variance at the chosen
+    split over total variance, in `[0, 1]`. Near 1 the two populations are cleanly apart;
+    low means the split is an artefact of a single mode and the threshold cannot carry a
+    measurement on its own.
+
+    Returns:
+        `(threshold, eta)`. Callers that report a figure must pass eta on to the reader;
+        a low value turns the share into a lower bound rather than a measurement.
+    """
+    threshold, eta = _otsu(values, bins)
+    return threshold, eta
+
+
 def otsu_threshold(values: np.ndarray, bins: int = 256) -> float:
     """Otsu's threshold over a 1-D distribution: the split maximising between-class variance.
 
@@ -115,7 +140,15 @@ def otsu_threshold(values: np.ndarray, bins: int = 256) -> float:
 
     Otsu asks the only question that transfers: given THIS pair's distribution, where does
     it separate into two populations? That is scale-free by construction.
+
+    It does not ask whether there ARE two populations. Where that matters, use
+    `otsu_split`, which returns the separability alongside the threshold.
     """
+    return _otsu(values, bins)[0]
+
+
+def _otsu(values: np.ndarray, bins: int) -> tuple[float, float]:
+    """Shared implementation: the maximising split and its separability."""
     flat = np.asarray(values, dtype=np.float64).ravel()
     flat = flat[np.isfinite(flat)]
     if flat.size == 0:
@@ -128,14 +161,24 @@ def otsu_threshold(values: np.ndarray, bins: int = 256) -> float:
     # Bins where either side is empty admit no split.
     valid = (weight_low > 0) & (weight_high > 0)
     if not valid.any():
-        return float(flat.max())
+        # One value repeated: a perfect split does not exist and none is believable.
+        return float(flat.max()), 0.0
 
     cum = np.cumsum(counts * centres)
     mean_low = np.where(weight_low > 0, cum / np.maximum(weight_low, 1), 0.0)
     mean_high = np.where(weight_high > 0, (cum[-1] - cum) / np.maximum(weight_high, 1), 0.0)
     between = weight_low * weight_high * (mean_low - mean_high) ** 2
     between[~valid] = -np.inf
-    return float(centres[int(np.argmax(between))])
+    best = int(np.argmax(between))
+
+    # eta = between-class variance / total variance, both in units of count^2 * value^2 so
+    # the weights cancel. A flat distribution has no variance to explain and no split.
+    total_count = float(weight_low[-1])
+    variance = float(np.var(flat))
+    if variance <= 1e-12 or total_count <= 0:
+        return float(centres[best]), 0.0
+    eta = float(between[best]) / (total_count**2 * variance)
+    return float(centres[best]), min(max(eta, 0.0), 1.0)
 
 
 def change_distance(rgb_t1: np.ndarray, rgb_t2: np.ndarray) -> np.ndarray:
@@ -191,8 +234,10 @@ def rgb_change_mask(
     # Adaptive by default. A frozen distance cannot transfer between pairs -- see
     # `otsu_threshold` -- so the split is found in this pair's own distribution unless the
     # caller insists on a number.
+    separability: float | None = None
     if threshold is None:
-        threshold = max(otsu_threshold(distance), RGB_CHANGE_DISTANCE_THRESHOLD)
+        found, separability = otsu_split(distance)
+        threshold = max(found, RGB_CHANGE_DISTANCE_THRESHOLD)
     raw = distance > threshold
 
     mask = np.zeros_like(raw)
@@ -216,6 +261,17 @@ def rgb_change_mask(
         warnings.append(
             f"{share * 100:.0f}% of the scene reads as changed, which usually means the "
             "images are misaligned, differently exposed, or not the same place"
+        )
+    if separability is not None and separability < RGB_CHANGE_MIN_SEPARABILITY:
+        warnings.append(
+            f"the distance distribution does not separate into changed and unchanged "
+            f"populations (Otsu separability {separability:.2f}, below "
+            f"{RGB_CHANGE_MIN_SEPARABILITY:.2f}), so the threshold was cut from a single "
+            f"mode rather than found between two. {share * 100:.0f}% is a LOWER BOUND on "
+            "the changed share, not a measurement: only the highest-contrast differences "
+            "cleared the cut and moderate change is counted as unchanged. This is the "
+            "expected shape when most of the scene changed. Pass an explicit threshold to "
+            "override"
         )
     return mask, warnings
 

@@ -78,17 +78,12 @@ class RadiometricChangeTool(BaseTool):
 
         first, warn_a = self._read_comparable(request.images[0])
         second, warn_b = self._read_comparable(request.images[1])
-        if first.shape != second.shape:
-            raise ValueError(
-                f"the two images are not on one grid: {first.shape[:2]} and "
-                f"{second.shape[:2]}. Radiometric differencing compares pixel to pixel "
-                "and cannot align them; crop or resample them to match first."
-            )
+        second, warn_fit = self._fit_to_grid(second, first, request.images)
 
         mask, change_warnings = rgb_change_mask(
             first, second, threshold=threshold, min_component_px=min_px
         )
-        warnings = list(dict.fromkeys([*warn_a, *warn_b, *change_warnings]))
+        warnings = list(dict.fromkeys([*warn_a, *warn_b, *warn_fit, *change_warnings]))
 
         share = float(mask.mean())
         gsd_m = request.images[0].gsd_m
@@ -136,6 +131,61 @@ class RadiometricChangeTool(BaseTool):
         )
 
     # -- helpers ----------------------------------------------------------------------
+
+    @staticmethod
+    def _fit_to_grid(
+        moving: np.ndarray, reference: np.ndarray, images
+    ) -> tuple[np.ndarray, list[str]]:
+        """Put the second date on the first's grid, or refuse to guess.
+
+        Two screenshots of one place, cropped by hand, arrive at 505x527 and 547x552 and
+        the difference operator cannot touch them. Refusing was correct but useless: that
+        is the imagery people actually have, and "crop them yourself first" hands the job
+        back to the person who came here to avoid it.
+
+        Where neither raster is georeferenced there is no measured alignment to preserve,
+        so scaling the second onto the first's frame assumes the two cover the same
+        extent. That assumption is a guess. It is a *stated* guess -- every answer carries
+        the warning -- and residual misregistration lands in the mask as change, which is
+        why the note names that consequence rather than just the resize.
+
+        Where either raster does carry a CRS, the misalignment is measurable and a
+        frame-fit would silently discard real georeferencing. That still refuses.
+        """
+        if moving.shape == reference.shape:
+            return moving, []
+
+        if any(getattr(ref, "crs", None) for ref in images):
+            raise ValueError(
+                f"the two images are not on one grid: {reference.shape[:2]} and "
+                f"{moving.shape[:2]}, and at least one carries a CRS. Reprojecting them "
+                "onto a common grid is a georeferencing job this tool will not guess at; "
+                "warp them to matching bounds and resolution first."
+            )
+
+        from PIL import Image
+
+        height, width = reference.shape[:2]
+        # Bilinear, not nearest: nearest resampling puts aliasing noise into the very
+        # difference this tool thresholds, and reports it as changed scene.
+        fitted = np.stack(
+            [
+                np.asarray(
+                    Image.fromarray(moving[:, :, band].astype(np.float32), mode="F").resize(
+                        (width, height), Image.BILINEAR
+                    ),
+                    dtype=np.float64,
+                )
+                for band in range(moving.shape[2])
+            ],
+            axis=-1,
+        )
+        return fitted, [
+            f"the two images are not on one grid ({reference.shape[:2]} and "
+            f"{moving.shape[:2]}) and neither is georeferenced, so date 2 was scaled onto "
+            "date 1's frame. This assumes both cover the same extent; where they do not, "
+            "the offset appears in the result as changed scene"
+        ]
 
     @staticmethod
     def _direction_note(first: np.ndarray, second: np.ndarray, mask: np.ndarray) -> list[str]:

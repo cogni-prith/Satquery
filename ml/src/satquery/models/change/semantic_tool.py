@@ -74,6 +74,10 @@ class SemanticChangeTool(BaseTool):
         )
 
         gsd_m = request.images[0].gsd_m
+        # The class that moved most. Picked here rather than inside the renderer because
+        # the legend drawn over the highlight has to name what the red pixels are, and a
+        # class chosen privately by the renderer cannot be reported with its own areas.
+        highlighted = max(shared, key=lambda k: int(np.count_nonzero(first[k] ^ second[k])))
         record = build_record(
             "change_trend",
             {
@@ -90,10 +94,11 @@ class SemanticChangeTool(BaseTool):
             tool_name=self.spec.name,
             tool_version=self.spec.version,
             answer=verbalize(record),
-            evidence=self._render(request, base, first, second, shared),
+            evidence=self._render(request, base, first, second, highlighted),
             confidence=min(first_agreement.values()) if first_agreement else None,
             params_used={
                 "classes": shared,
+                "highlighted_class": highlighted,
                 "composed_from": "seg.landcover",
                 "transitions": self._transition_summary(first, second, shared, gsd_m),
             },
@@ -120,7 +125,7 @@ class SemanticChangeTool(BaseTool):
                     out[f"{source}->{target}_{unit}"] = round(count * scale, 1)
         return out
 
-    def _render(self, request, base, first, second, shared) -> Evidence:
+    def _render(self, request, base, first, second, name) -> Evidence:
         """Draw the transition. A failed render must not fail a good measurement."""
         from satquery.models.indices.render import render_change_alpha, render_change_map, write_png
         from satquery.preprocess.optical import stretch_to_uint8
@@ -130,8 +135,6 @@ class SemanticChangeTool(BaseTool):
         try:
             out = artifact_dir("serve", "evidence")
             stem = request.request_id[:12]
-            # The class that moved most, weighted the same way the index tool weights it.
-            name = max(shared, key=lambda k: int(np.count_nonzero(first[k] ^ second[k])))
             display = np.ascontiguousarray(stretch_to_uint8(base[[2, 1, 0]]).transpose(1, 2, 0))
             evidence.mask_path = write_png(
                 out / f"{stem}_change.png",
