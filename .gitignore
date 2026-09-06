@@ -46,3 +46,4 @@ lightning_logs/
 .idea/
 .vscode/
 .DS_Store
+.compat/
