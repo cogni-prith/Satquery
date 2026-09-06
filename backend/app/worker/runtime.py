@@ -75,7 +75,10 @@ class GpuRuntime:
         try:
             from satquery.models.registry import REGISTRY
 
-            bound = self._bind_deterministic() + self._bind_vlm()
+            # v2's serve.tools binds every tool it has weights for, EarthDial included.
+            # Only fall through to loading the backbone here when the package did not,
+            # or the card holds two copies of a 4 GB model and the second one OOMs.
+            bound = self._bind_deterministic() or self._bind_vlm()
             if not bound:
                 raise RuntimeError(
                     "no tool could be bound; neither the deterministic index tool nor the "
@@ -112,8 +115,12 @@ class GpuRuntime:
         except ImportError as exc:
             _LOG.info("no deterministic index tool in this satquery package (%s)", exc)
             return []
-        _LOG.info("bound the deterministic index tool; no weights required")
-        return ["indices.deterministic"]
+        # That module unregisters any spec whose weights turned out to be missing, so what
+        # is still registered is exactly what it bound. Reading the registry back beats
+        # hardcoding a list here that would drift from the package's own decisions.
+        from satquery.models.registry import REGISTRY
+
+        return [spec.name for spec in REGISTRY.list_specs()]
 
     def _bind_vlm(self) -> list[str]:
         """Load EarthDial-4B and bind the four VLM tools. Present in v1 only.
