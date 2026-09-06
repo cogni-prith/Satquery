@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import type { BoundingBox, UploadedImage } from '../lib/api'
-import { IconSwap, IconTarget, IconX } from './Icons'
+import { IconSwap, IconTarget, IconX, IconZoomOut } from './Icons'
+import { ease, springSoft, tap } from '../lib/motion'
 
 /**
  * The imagery stage. The subject of the work, so it gets the room.
@@ -10,7 +12,14 @@ import { IconSwap, IconTarget, IconX } from './Icons'
  * curtain is how a person actually sees change: the same pixels, the same place on
  * screen, one date wiped over the other. Two images in two boxes forces the viewer to
  * do the registration in their head, which is exactly the work the tool exists to do.
+ *
+ * Zoom and pan transform one wrapper that holds every layer *and* the curtain, so the
+ * wipe line, the rasters and the boxes all move as one piece. Transforming the images
+ * but not the curtain would slide the split line away from its own handle.
  */
+
+const MAX_ZOOM = 6
+
 /** Compact area for the legend. Returns an empty string when no scale was available. */
 function fmtArea(m2: number | null | undefined): string {
   if (m2 == null) return ''
@@ -26,6 +35,7 @@ export function Canvas({
   boxesFor,
   highlight,
   gainedLost,
+  scanning,
   onRemove,
   onSwap,
 }: {
@@ -36,13 +46,19 @@ export function Canvas({
   highlight: string | null
   /** Ground area gained and lost for the highlighted class, in m2, when the GSD is known. */
   gainedLost: { klass: string; gained: number | null; lost: number | null } | null
+  /** A tool is running: sweep the frame once so the wait has a heartbeat. */
+  scanning?: boolean
   onRemove: (id: string) => void
   onSwap: () => void
 }) {
   const [split, setSplit] = useState(50)
   const [showHighlight, setShowHighlight] = useState(true)
   const [dragging, setDragging] = useState(false)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [panning, setPanning] = useState(false)
   const frame = useRef<HTMLDivElement>(null)
+  const panFrom = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
 
   const moveTo = useCallback((clientX: number) => {
     const box = frame.current?.getBoundingClientRect()
@@ -63,6 +79,42 @@ export function Canvas({
       window.removeEventListener('pointerup', up)
     }
   }, [dragging, moveTo])
+
+  // Pan is only reachable once zoomed in, so a plain click on a fitted frame never
+  // nudges the picture off centre by a pixel or two.
+  useEffect(() => {
+    if (!panning) return
+    const move = (event: PointerEvent) => {
+      const from = panFrom.current
+      if (!from) return
+      setPan({ x: from.px + (event.clientX - from.x), y: from.py + (event.clientY - from.y) })
+    }
+    const up = () => {
+      panFrom.current = null
+      setPanning(false)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+  }, [panning])
+
+  const onWheel = (event: React.WheelEvent) => {
+    if (!event.ctrlKey && Math.abs(event.deltaY) < 2) return
+    event.preventDefault()
+    setZoom((current) => {
+      const next = Math.min(MAX_ZOOM, Math.max(1, current * (event.deltaY < 0 ? 1.12 : 1 / 1.12)))
+      if (next === 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  }
+
+  const resetView = () => {
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+  }
 
   if (images.length === 0) return null
 
@@ -87,126 +139,178 @@ export function Canvas({
     if (!pixelWidth || !pixelHeight) return null
 
     return boxesFor(index).map((box, boxIndex) => (
-      <div
+      <motion.div
         className="bbox"
         key={boxIndex}
+        initial={{ opacity: 0, scale: 1.08 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: boxIndex * 0.07, duration: 0.35, ease }}
         style={{
           left: `${(box.x_min / pixelWidth) * 100}%`,
           top: `${(box.y_min / pixelHeight) * 100}%`,
           width: `${((box.x_max - box.x_min) / pixelWidth) * 100}%`,
           height: `${((box.y_max - box.y_min) / pixelHeight) * 100}%`,
-          animationDelay: `${boxIndex * 80}ms`,
+          // Label text must not shrink with the picture when zoomed in.
+          ['--unzoom' as string]: String(1 / zoom),
         }}
       >
         <span>
           {box.label.length > 28 ? `${box.label.slice(0, 28)}…` : box.label}
           {box.score != null && ` ${(box.score * 100).toFixed(0)}%`}
         </span>
-      </div>
+      </motion.div>
     ))
   }
 
   return (
     <div className="stage">
       <div
-        className={`frame ${pair ? 'is-pair' : ''}`}
+        className={`frame ${pair ? 'is-pair' : ''} ${zoom > 1 ? 'zoomed' : ''} ${scanning ? 'scanning' : ''}`}
         ref={frame}
-        style={{ aspectRatio: String(ratio) }}
+        onWheel={onWheel}
+        style={{ aspectRatio: String(ratio), ['--ar' as string]: String(ratio) }}
       >
-        <img className="layer" src={`/api/images/${images[0].image_id}/preview`} alt={images[0].filename} />
-        <div className="layer-boxes">{overlay(0)}</div>
+        <motion.div
+          className="frame-view"
+          animate={{ scale: zoom, x: pan.x, y: pan.y }}
+          transition={panning ? { duration: 0 } : springSoft}
+          onPointerDown={(event) => {
+            if (zoom <= 1) return
+            event.preventDefault()
+            panFrom.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y }
+            setPanning(true)
+          }}
+        >
+          <img className="layer" src={`/api/images/${images[0].image_id}/preview`} alt={images[0].filename} />
+          <div className="layer-boxes">{overlay(0)}</div>
+
+          {pair && (
+            <>
+              {/* The second date is clipped to the curtain. Both layers are absolutely
+                  positioned on the same grid, so the wipe compares like with like. */}
+              <div className="layer-clip" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
+                <img className="layer" src={`/api/images/${images[1].image_id}/preview`} alt={images[1].filename} />
+                <div className="layer-boxes">{overlay(1)}</div>
+              </div>
+
+              <div
+                className={`curtain ${dragging ? 'grabbing' : ''}`}
+                style={{ left: `${split}%`, ['--unzoom' as string]: String(1 / zoom) }}
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setDragging(true)
+                }}
+                role="separator"
+                aria-label="Drag to compare dates"
+                aria-valuenow={Math.round(split)}
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowLeft') setSplit((v) => Math.max(0, v - 4))
+                  if (event.key === 'ArrowRight') setSplit((v) => Math.min(100, v + 4))
+                }}
+              >
+                <span className="curtain-grip">
+                  <i />
+                  <i />
+                </span>
+              </div>
+            </>
+          )}
+
+          {/* The highlight sits above both dates and outside the curtain clip, so the marked
+              pixels stay in place while the wipe moves underneath them -- which is what makes
+              it read as "this area changed" rather than as part of either image. */}
+          <AnimatePresence>
+            {highlight && showHighlight && (
+              <motion.img
+                key={highlight}
+                className="layer highlight"
+                src={`/api/images/evidence/${highlight}`}
+                alt=""
+                initial={{ opacity: 0, scale: 1.015 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.2 } }}
+                transition={{ duration: 0.55, ease }}
+              />
+            )}
+          </AnimatePresence>
+        </motion.div>
 
         {pair && (
           <>
-            {/* The second date is clipped to the curtain. Both layers are absolutely
-                positioned on the same grid, so the wipe compares like with like. */}
-            <div className="layer-clip" style={{ clipPath: `inset(0 0 0 ${split}%)` }}>
-              <img className="layer" src={`/api/images/${images[1].image_id}/preview`} alt={images[1].filename} />
-              <div className="layer-boxes">{overlay(1)}</div>
-            </div>
-
-            <div
-              className={`curtain ${dragging ? 'grabbing' : ''}`}
-              style={{ left: `${split}%` }}
-              onPointerDown={(event) => {
-                event.preventDefault()
-                setDragging(true)
-              }}
-              role="separator"
-              aria-label="Drag to compare dates"
-              aria-valuenow={Math.round(split)}
-              tabIndex={0}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft') setSplit((v) => Math.max(0, v - 4))
-                if (event.key === 'ArrowRight') setSplit((v) => Math.min(100, v + 4))
-              }}
-            >
-              <span className="curtain-grip">
-                <i />
-                <i />
-              </span>
-            </div>
-
             <span className="date-tag left">{roles?.[0] ?? 'date 1'}</span>
             <span className="date-tag right">{roles?.[1] ?? 'date 2'}</span>
           </>
         )}
 
-        {/* The highlight sits above both dates and outside the curtain clip, so the marked
-            pixels stay in place while the wipe moves underneath them -- which is what makes
-            it read as "this area changed" rather than as part of either image. */}
-        {highlight && showHighlight && (
-          <img className="layer highlight" src={`/api/images/evidence/${highlight}`} alt="" />
-        )}
+        {scanning && <span className="frame-scan" />}
 
         {/* The legend has to carry the outline, not just the fill. A red blob alone
             cannot say what it was measured against: on a reservoir that only filled, the
             changed region IS most of the final lake, and the overlay reads as "you have
             drawn the water" until the old shoreline is named. */}
         {highlight && (
-          <div className="frame-legend">
-            {pair ? (
+          <motion.div
+            className="frame-legend"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, ease }}
+          >
+            {/* Gained/lost is a claim only the spectral path can make. The radiometric
+                fallback marks where the scene differs and cannot say in which direction,
+                so on a pair with no class it gets the one label it has earned. */}
+            {pair && gainedLost ? (
               <>
-                {gainedLost?.klass && <span className="key klass">{gainedLost.klass.replace(/_/g, ' ')}</span>}
-                <span className="key"><i className="sw gained" /> gained{fmtArea(gainedLost?.gained)}</span>
+                {gainedLost.klass && <span className="key klass">{gainedLost.klass.replace(/_/g, ' ')}</span>}
+                <span className="key"><i className="sw gained" /> gained{fmtArea(gainedLost.gained)}</span>
                 {/* The zero is printed rather than the row hidden. A scene where nothing
                     was lost is a finding; a legend that quietly drops the category looks
                     like the overlay failed to draw it. */}
-                <span className={`key ${gainedLost?.lost === 0 ? 'nil' : ''}`}>
-                  <i className="sw lost" /> lost{fmtArea(gainedLost?.lost)}
+                <span className={`key ${gainedLost.lost === 0 ? 'nil' : ''}`}>
+                  <i className="sw lost" /> lost{fmtArea(gainedLost.lost)}
                 </span>
                 <span className="key"><i className="sw rim" /> extent at date 1</span>
               </>
             ) : (
-              <span className="key"><i className="sw gained" /> measured area</span>
+              <span className="key">
+                <i className="sw gained" /> {pair ? 'changed appearance' : 'measured area'}
+              </span>
             )}
-          </div>
+          </motion.div>
         )}
 
         <div className="frame-tools">
+          {zoom > 1 && (
+            <motion.button className="ghost-btn" whileTap={tap} onClick={resetView} title="Fit the scene to the frame">
+              <IconZoomOut /> {zoom.toFixed(1)}× fit
+            </motion.button>
+          )}
           {highlight && (
-            <button
+            <motion.button
               className={`ghost-btn ${showHighlight ? 'on' : ''}`}
+              whileTap={tap}
               onClick={() => setShowHighlight((v) => !v)}
               title="Toggle the highlight over the imagery"
             >
               <IconTarget /> {showHighlight ? 'hide' : 'show'} highlight
-            </button>
+            </motion.button>
           )}
           {pair && (
-            <button className="ghost-btn" onClick={onSwap} title="Swap which image is the earlier date">
+            <motion.button className="ghost-btn" whileTap={tap} onClick={onSwap} title="Swap which image is the earlier date">
               <IconSwap /> swap dates
-            </button>
+            </motion.button>
           )}
           {images.map((image, index) => (
-            <button
+            <motion.button
               key={image.image_id}
               className="ghost-btn"
+              whileTap={tap}
               onClick={() => onRemove(image.image_id)}
               title={`Remove ${image.filename}`}
             >
               <IconX /> {pair ? `date ${index + 1}` : 'clear'}
-            </button>
+            </motion.button>
           ))}
         </div>
       </div>

@@ -75,7 +75,7 @@ export function planFor(images: UploadedImage[]): Plan {
     config: 'bi_temporal_pair',
     headline: 'Bi-temporal pair',
     detail: dated
-      ? 'Change detection over the closed CDVQA answer set. Order matters — the earlier acquisition must come first.'
+      ? 'Change detection. Each class is segmented at both dates and differenced, so the answer is an area in hectares. Order matters — the earlier acquisition must come first.'
       : 'Change detection. Neither raster carries an acquisition timestamp, so the ordering below is the one that will be used.',
     roles: ['Before', 'After'],
     ordered: true,
