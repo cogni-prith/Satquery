@@ -269,7 +269,11 @@ class ChangeVqaTool(BaseTool):
         from safetensors.torch import load_file
 
         checkpoint = self._resolve_checkpoint()
-        vocabulary_path = checkpoint.parent / "question_vocabulary.json"
+        # Training writes it in the output dir, one level above `checkpoint-N/`; an
+        # exported directory carries it beside the weights. Accept both layouts.
+        vocabulary_path = checkpoint / "question_vocabulary.json"
+        if not vocabulary_path.is_file():
+            vocabulary_path = checkpoint.parent / "question_vocabulary.json"
         if not vocabulary_path.is_file():
             raise NotImplementedError(
                 f"question vocabulary not found at {vocabulary_path}. It is written beside "
