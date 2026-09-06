@@ -63,3 +63,7 @@ export const IconRuler = () => (
 export const IconClock = () => (
   <svg {...base}><circle cx="12" cy="12" r="9" /><path d="M12 7v5.2l3.2 2" /></svg>
 )
+
+export const IconZoomOut = () => (
+  <svg {...base}><circle cx="11" cy="11" r="7" /><path d="M8.5 11h5M20 20l-4.3-4.3" /></svg>
+)

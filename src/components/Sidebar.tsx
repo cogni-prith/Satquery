@@ -1,11 +1,21 @@
+import { motion } from 'framer-motion'
 import type { ToolSpec } from '../lib/api'
 import { IconCaption, IconChange, IconFusion, IconQuestion } from './Icons'
+import { panelIn, rowIn, stagger } from '../lib/motion'
 
 /**
- * The left sidebar: what the system can do, and what is actually live.
+ * The left rail: what the system can do, and what is actually live.
+ *
+ * Collapsed to icons and reopened by reaching for it. The capability list is reference
+ * material — it is read once at the start and then never again during a run — so it does
+ * not deserve a permanent 250px of a screen whose whole point is the imagery. Expanding
+ * on hover rather than on a click means the cost of consulting it is nothing.
+ *
+ * The expand is CSS on `:hover` and `:focus-within` rather than React state, so it also
+ * opens for a keyboard user tabbing into it, with no handler to keep in step.
  *
  * Every capability is listed, including the ones that are not ready. Hiding an untrained
- * model would make the sidebar look better and the system look dishonest -- and the gap
+ * model would make the rail look better and the system look dishonest -- and the gap
  * between "specified" and "trained" is the real state of the project, so the interface
  * shows it.
  *
@@ -57,14 +67,14 @@ export function Sidebar({ tools, active }: { tools: ToolSpec[]; active: string |
   const bound = new Set(tools.filter((tool) => tool.implemented).map((tool) => tool.name))
 
   return (
-    <aside className="side">
+    <motion.aside className="side" variants={panelIn}>
       <div className="side-brand">
         <div className="orbit">
           <span className="ring" />
           <span className="sat" />
           <span className="planet" />
         </div>
-        <div>
+        <div className="side-brand-text">
           <div className="wordmark">
             SatQuery <span>AI</span>
           </div>
@@ -72,15 +82,17 @@ export function Sidebar({ tools, active }: { tools: ToolSpec[]; active: string |
         </div>
       </div>
 
-      <nav className="side-group">
+      <motion.nav className="side-group" variants={stagger(0.05)} initial="hidden" animate="show">
         <div className="side-label">capabilities</div>
         {CAPABILITIES.map((capability) => {
           const live = capability.tools.some((tool) => bound.has(tool))
           const Icon = capability.icon
           return (
-            <div
+            <motion.div
               className={`nav-item ${live ? '' : 'dim'} ${active === capability.key ? 'active' : ''}`}
               key={capability.key}
+              variants={rowIn}
+              title={`${capability.title} — ${capability.blurb}`}
             >
               <span className="nav-icon">
                 <Icon />
@@ -91,10 +103,10 @@ export function Sidebar({ tools, active }: { tools: ToolSpec[]; active: string |
               </span>
               {!live && <span className="badge">soon</span>}
               {active === capability.key && <span className="badge live">running</span>}
-            </div>
+            </motion.div>
           )
         })}
-      </nav>
+      </motion.nav>
 
       <div className="side-group">
         <div className="side-label">
@@ -119,6 +131,6 @@ export function Sidebar({ tools, active }: { tools: ToolSpec[]; active: string |
           model never sees the image — it only words a record of what was measured.
         </p>
       </div>
-    </aside>
+    </motion.aside>
   )
 }

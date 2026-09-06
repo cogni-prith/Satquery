@@ -1,5 +1,7 @@
+import { motion } from 'framer-motion'
 import type { Plan } from '../lib/roles'
 import type { Trace, UploadedImage } from '../lib/api'
+import { ease, rowIn, spring, stagger } from '../lib/motion'
 
 /**
  * The routing diagram, lit up along the path actually taken.
@@ -11,6 +13,11 @@ import type { Trace, UploadedImage } from '../lib/api'
  * The gate is the honest thing to show here: routing happens by reading modality, band
  * names and GSD, with no model involved. That is why the answer to "which tool ran" is
  * always checkable.
+ *
+ * The connectors draw themselves down the chosen branch when a route resolves. That is
+ * the one animation in this interface carrying an argument rather than a mood: the whole
+ * claim of the architecture is that this path is decided, not guessed, and watching it
+ * travel is what makes that legible in the seconds a judge gives it.
  */
 export function RouteMap({
   images,
@@ -33,44 +40,74 @@ export function RouteMap({
     { key: 'fusion.extraction', label: 'Optical + SAR', side: 'pair' },
   ]
 
+  /** A connector draws top-down when its branch is live, and stays a hairline when not. */
+  const line = (live: boolean, delay: number) => (
+    <motion.span
+      className={`rline ${live ? 'lit' : ''}`}
+      initial={false}
+      animate={{ scaleY: 1, opacity: 1 }}
+      transition={{ duration: 0.45, delay: live ? delay : 0, ease }}
+    />
+  )
+
   return (
     <div className="routemap">
-      <div className={`rnode root ${count ? 'lit' : ''}`}>
+      <motion.div
+        className={`rnode root ${count ? 'lit' : ''}`}
+        animate={count ? { scale: [1, 1.02, 1] } : {}}
+        transition={{ duration: 0.5, ease }}
+      >
         <em>query</em>
         <b>What is needed?</b>
-      </div>
+      </motion.div>
 
       <div className="rsplit">
-        <span className={`rline ${branch === 'single' ? 'lit' : ''}`} />
-        <span className={`rline ${branch === 'pair' ? 'lit' : ''}`} />
+        {line(branch === 'single', 0.05)}
+        {line(branch === 'pair', 0.05)}
       </div>
 
       <div className="rrow">
-        <div className={`rnode ${branch === 'single' ? 'lit' : ''}`}>
+        <motion.div className={`rnode ${branch === 'single' ? 'lit' : ''}`} layout transition={spring}>
           <em>1 image</em>
           <b>Single scene</b>
-        </div>
-        <div className={`rnode ${branch === 'pair' ? 'lit' : ''}`}>
+        </motion.div>
+        <motion.div className={`rnode ${branch === 'pair' ? 'lit' : ''}`} layout transition={spring}>
           <em>2 images</em>
           <b>{plan.config === 'cross_modal_pair' ? 'Cross-modal pair' : 'Bi-temporal pair'}</b>
-        </div>
+        </motion.div>
       </div>
 
       <div className="rsplit four">
         {leaves.map((leaf) => (
-          <span key={leaf.key} className={`rline ${branch === leaf.side ? 'lit' : ''}`} />
+          <span key={leaf.key}>{line(branch === leaf.side, 0.2)}</span>
         ))}
       </div>
 
       <div className="rrow four">
         {leaves.map((leaf) => (
-          <div
+          <motion.div
             className={`rleaf ${chosen === leaf.key ? 'chosen' : branch === leaf.side ? 'lit' : ''}`}
             key={leaf.key}
+            layout
+            transition={spring}
+            animate={
+              chosen === leaf.key
+                ? { scale: [1, 1.06, 1], transition: { duration: 0.55, delay: 0.3, ease } }
+                : {}
+            }
           >
             {leaf.label}
-            {chosen === leaf.key && <span className="rtick">selected</span>}
-          </div>
+            {chosen === leaf.key && (
+              <motion.span
+                className="rtick"
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.45, ...spring }}
+              >
+                selected
+              </motion.span>
+            )}
+          </motion.div>
         ))}
       </div>
     </div>
@@ -108,19 +145,19 @@ export function DecisionPanel({
   ]
 
   return (
-    <div className="decision">
+    <motion.div className="decision" variants={stagger(0.05)} initial="hidden" animate="show">
       {rows.map(([label, value, highlight]) => (
-        <div className="drow" key={label}>
+        <motion.div className="drow" key={label} variants={rowIn}>
           <span className="dlabel">{label}</span>
           <span className={`dvalue ${highlight && value ? 'hot' : ''} ${value ? '' : 'none'}`}>
             {value ?? '—'}
           </span>
-        </div>
+        </motion.div>
       ))}
       {/* A trace with no tool chosen means the gate refused: that is a decision, not an
           idle state, and reporting it as "awaiting a query" is how the interface came to
           look like it had simply ignored the request. */}
-      <div className={`dstatus ${busy ? 'busy' : !chosen && trace ? 'refused' : ''}`}>
+      <motion.div className={`dstatus ${busy ? 'busy' : !chosen && trace ? 'refused' : ''}`} variants={rowIn}>
         <span className="dpulse" />
         {busy
           ? 'Routing and measuring…'
@@ -129,7 +166,7 @@ export function DecisionPanel({
             : trace
               ? 'Refused — no tool accepts this input'
               : 'Awaiting a query'}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }

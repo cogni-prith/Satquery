@@ -63,8 +63,18 @@
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
-  --rail: 254px;
+  --rail: 76px;
+  --rail-open: 268px;
   --dock: 372px;
+
+  /* Glass. One surface recipe so every floating instrument is cut from the same
+     material -- panels that each pick their own translucency read as a pile of
+     widgets rather than one console. */
+  --glass: rgba(16, 22, 35, 0.62);
+  --glass-strong: rgba(12, 17, 28, 0.82);
+  --glass-line: rgba(255, 255, 255, 0.07);
+  --glass-line-top: rgba(255, 255, 255, 0.13);
+  --blur: 20px;
 }
 
 /* ── reset ──────────────────────────────────────────────────────────────────── */
@@ -102,16 +112,91 @@ h1, h2, h3, h4 { font-weight: 600; font-size: inherit; }
 ::-webkit-scrollbar-thumb:hover { background: #3b4a6b; background-clip: content-box; }
 
 /* ── backdrop ───────────────────────────────────────────────────────────────── */
-/* Two washes and nothing else. The old version animated a full-viewport gradient the
-   whole time the GPU was busy with inference; this one paints once. */
-.aurora {
+/*
+ * Drifting blooms over a fixed starfield, all of it composited.
+ *
+ * Every animated property here is `transform` or `opacity`, which the compositor can
+ * run off the main thread. The main thread during a demo belongs to the request and to
+ * the result rendering; a backdrop that competed for it would make the app feel slower
+ * precisely in the seconds it is being judged on feeling fast.
+ */
+.backdrop {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
+  overflow: hidden;
   background:
-    radial-gradient(52% 40% at 14% 0%, rgba(139, 124, 246, 0.13), transparent 70%),
-    radial-gradient(46% 42% at 92% 100%, rgba(56, 189, 248, 0.09), transparent 72%);
+    radial-gradient(120% 80% at 50% -10%, #0a1020 0%, var(--bg-0) 55%),
+    var(--bg-0);
+}
+
+.stars { position: absolute; inset: 0; }
+.stars span {
+  position: absolute;
+  border-radius: 50%;
+  background: #cfe0ff;
+  animation: twinkle ease-in-out infinite;
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+
+.bloom {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  will-change: transform;
+}
+.bloom-a {
+  width: 46vw; height: 46vw; top: -16vw; left: -10vw;
+  background: radial-gradient(circle, rgba(139, 124, 246, 0.30), transparent 68%);
+  animation: drift-a 34s var(--ease-in-out) infinite;
+}
+.bloom-b {
+  width: 40vw; height: 40vw; bottom: -14vw; right: -8vw;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.22), transparent 68%);
+  animation: drift-b 42s var(--ease-in-out) infinite;
+}
+.bloom-c {
+  width: 34vw; height: 34vw; top: 32%; left: 46%;
+  background: radial-gradient(circle, rgba(74, 222, 128, 0.10), transparent 70%);
+  animation: drift-c 52s var(--ease-in-out) infinite;
+}
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(8vw, 6vh, 0) scale(1.14); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+  50% { transform: translate3d(-7vw, -5vh, 0) scale(1); }
+}
+@keyframes drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-5vw, 7vh, 0) scale(1.2); }
+}
+
+/* A faint graticule. It reads as an instrument surface without ever being looked at. */
+.grid-veil {
+  position: absolute;
+  inset: 0;
+  opacity: 0.32;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 62px 62px;
+  mask-image: radial-gradient(90% 70% at 50% 40%, #000 30%, transparent 100%);
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 100% at 50% 45%, transparent 52%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bloom, .stars span { animation: none !important; }
 }
 
 /* ── shell ──────────────────────────────────────────────────────────────────── */
@@ -120,7 +205,10 @@ h1, h2, h3, h4 { font-weight: 600; font-size: inherit; }
   z-index: 1;
   height: 100dvh;
   display: grid;
-  grid-template-columns: var(--rail) minmax(0, 1fr);
+  /* The rail is fixed so it expands over the stage instead of resizing it; it holds
+     no grid track, so its width is reserved with padding instead. */
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: var(--rail);
 }
 
 .main {
@@ -151,15 +239,15 @@ h1, h2, h3, h4 { font-weight: 600; font-size: inherit; }
 .col > * { flex: none; }
 .centre { padding-right: 8px; }
 .dock {
-  border-left: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.22);
-  padding-left: 14px;
+  padding-left: 10px;
+  background: none;
+  border-left: none;
 }
 
 /* Under a wide screen the dock stops being a column and becomes the bottom of the
    middle one -- keeping a 372px panel on a laptop would leave the imagery narrower than
    the evidence beside it, which inverts the whole point of the layout. */
-@media (max-width: 1440px) { :root { --dock: 320px; --rail: 226px; } }
+@media (max-width: 1440px) { :root { --dock: 320px; } }
 @media (max-width: 1180px) {
   .work { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
   .col { overflow: visible; }
@@ -172,11 +260,20 @@ h1, h2, h3, h4 { font-weight: 600; font-size: inherit; }
 
 /* ── left rail ──────────────────────────────────────────────────────────────── */
 .side {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: var(--rail);
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
-  border-right: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.28);
+  border-right: 1px solid var(--glass-line);
+  background: var(--glass-strong);
+  backdrop-filter: blur(var(--blur)) saturate(150%);
+  transition: width 0.34s var(--ease), box-shadow 0.34s var(--ease);
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -458,6 +555,9 @@ h1, h2, h3, h4 { font-weight: 600; font-size: inherit; }
 }
 
 /* ── imagery stage ──────────────────────────────────────────────────────────── */
+/* The fade-in wrapper is a grid item: without a definite width it shrink-wraps, and the
+   frame's `min(100%, ...)` then resolves against nothing and collapses to zero. */
+.stage-mount { width: 100%; display: grid; place-items: center; }
 .stage {
   /* The frame is sized from the viewport rather than the container: an aspect-ratio box
      with both axes auto has no basis to resolve against, and one with width:100% is
@@ -1195,4 +1295,336 @@ h1, h2, h3, h4 { font-weight: 600; font-size: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+ * Redesign layer.
+ *
+ * Everything below either replaces a surface with glass or adds motion. It is kept as
+ * one block at the end rather than threaded through the component sections above so
+ * that the original layout rules stay readable as a unit -- and so that the whole
+ * presentation change can be read, or reverted, in one place.
+ * ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── rail: collapsed to icons, opening on reach ─────────────────────────────── */
+.side:hover,
+.side:focus-within {
+  width: var(--rail-open);
+  box-shadow: 34px 0 70px -30px rgba(0, 0, 0, 0.95);
+}
+
+/* Text is faded and clipped rather than unmounted: mounting on hover would reflow the
+   rail's own scroll height every time the pointer passed over it. */
+.side .nav-text,
+.side .side-brand-text,
+.side .side-label,
+.side .model-name,
+.side .badge,
+.side .side-about {
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+  white-space: nowrap;
+}
+.side:hover .nav-text,
+.side:hover .side-brand-text,
+.side:hover .side-label,
+.side:hover .model-name,
+.side:hover .badge,
+.side:hover .side-about,
+.side:focus-within .nav-text,
+.side:focus-within .side-brand-text,
+.side:focus-within .side-label,
+.side:focus-within .model-name,
+.side:focus-within .badge,
+.side:focus-within .side-about {
+  opacity: 1;
+  transition-delay: 0.1s;
+}
+
+.side .nav-item { position: relative; }
+.side .nav-item .nav-icon { flex: none; }
+.side .model-row .sig { flex: none; }
+
+/* A live capability keeps a visible mark while the rail is shut, so the collapsed state
+   still reports status instead of only listing glyphs. */
+.side .nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 8px; bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+
+/* ── glass surfaces ─────────────────────────────────────────────────────────── */
+.panel,
+.card,
+.bar,
+.foot {
+  background: var(--glass);
+  backdrop-filter: blur(var(--blur)) saturate(140%);
+  border: 1px solid var(--glass-line);
+  border-top-color: var(--glass-line-top);
+  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.panel, .card { border-radius: var(--radius-lg); }
+
+.bar {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.panel.accent, .panel.stage-panel {
+  box-shadow: var(--shadow-3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ── command bar ────────────────────────────────────────────────────────────── */
+.command { position: relative; overflow: hidden; }
+.command-mark { display: inline-flex; align-items: center; color: var(--accent-2); }
+.command.busy .command-mark { animation: mark-spin 1.6s linear infinite; }
+@keyframes mark-spin { to { transform: rotate(360deg); } }
+
+/* One sweep across the field the question was typed into: the wait is acknowledged on
+   the same surface that took the input, not somewhere else on the page. */
+.command-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, rgba(139, 124, 246, 0.22) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: sweep 1.5s var(--ease-in-out) infinite;
+}
+@keyframes sweep { to { transform: translateX(100%); } }
+
+/* ── imagery: zoom, pan, scan ───────────────────────────────────────────────── */
+/* The transformed wrapper holds every layer and the curtain, so the whole comparison
+   moves as one piece. It must not be given a background or a border: it is a transform
+   target, and anything painted on it would scale with the picture. */
+.frame-view {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
+  will-change: transform;
+}
+.frame.zoomed .frame-view { cursor: grab; }
+.frame.zoomed .frame-view:active { cursor: grabbing; }
+
+/* Chrome inside the frame is counter-scaled so a label stays legible at 6x. */
+.frame.zoomed .bbox > span,
+.frame.zoomed .curtain-grip {
+  transform: scale(var(--unzoom, 1));
+  transform-origin: top left;
+}
+
+.frame-scan {
+  position: absolute;
+  left: 0; right: 0;
+  height: 30%;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(139, 124, 246, 0.20), transparent);
+  border-bottom: 1px solid rgba(196, 181, 253, 0.55);
+  animation: scan-down 2.1s var(--ease-in-out) infinite;
+}
+@keyframes scan-down {
+  0% { top: -30%; opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.frame.scanning { box-shadow: 0 0 0 1px var(--accent-line), 0 0 46px -10px rgba(139, 124, 246, 0.5); }
+
+/* ── result tray ────────────────────────────────────────────────────────────── */
+/*
+ * Sticky to the foot of the centre column rather than in its flow. The imagery is what
+ * the operator is looking at when a result lands, so the answer arrives over the bottom
+ * of the picture instead of pushing the picture up out from under their eye.
+ */
+.tray {
+  position: sticky;
+  bottom: 0;
+  z-index: 30;
+  border-radius: var(--radius-lg);
+  background: var(--glass-strong);
+  backdrop-filter: blur(26px) saturate(150%);
+  border: 1px solid var(--accent-line);
+  box-shadow: var(--shadow-3), 0 -10px 50px -24px rgba(139, 124, 246, 0.55);
+  overflow: hidden;
+  max-height: 48dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The tray docks below the imagery rather than over it: a sticky panel tall enough to
+   cover the frame hides the evidence the figures were measured from. The stage gives up
+   the height the tray needs, so both stay on screen at once. */
+.centre:has(.tray) .stage { --stage-h: clamp(200px, calc(100dvh - 590px), 480px); }
+.tray-body { min-height: 0; overflow-y: auto; }
+
+.tray-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--glass-line);
+}
+.tray-head h2 { font-size: 13px; letter-spacing: 0.01em; display: flex; align-items: center; gap: 7px; }
+.tray-head .head-tools { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+.tray-grip {
+  width: 26px; height: 3px; border-radius: 99px;
+  background: var(--line-bright);
+  flex: none;
+}
+.tray-pad { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+
+/* Three dots that tick while a tool runs. */
+.dots { display: inline-flex; gap: 3px; }
+.dots i {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent-2);
+  animation: dot-bounce 1.1s var(--ease-in-out) infinite;
+}
+.dots i:nth-child(2) { animation-delay: 0.14s; }
+.dots i:nth-child(3) { animation-delay: 0.28s; }
+@keyframes dot-bounce {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* ── KPI sheen ──────────────────────────────────────────────────────────────── */
+.kpi { position: relative; overflow: hidden; }
+.kpi-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.07) 50%, transparent 70%);
+  transform: translateX(-120%);
+  animation: sheen 1.1s var(--ease) 0.35s 1 forwards;
+}
+@keyframes sheen { to { transform: translateX(120%); } }
+
+/* ── evidence lightbox ──────────────────────────────────────────────────────── */
+.etile { cursor: zoom-in; }
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 5vh 5vw;
+  background: rgba(3, 5, 10, 0.82);
+  backdrop-filter: blur(8px);
+  cursor: zoom-out;
+}
+.etile.lb {
+  cursor: default;
+  max-width: min(1000px, 90vw);
+  width: 100%;
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-line-top);
+  box-shadow: var(--shadow-3);
+}
+.etile.lb img { max-height: 74vh; width: 100%; object-fit: contain; }
+.etile.lb .etile-head { display: flex; align-items: center; justify-content: space-between; }
+
+/* ── intro ──────────────────────────────────────────────────────────────────── */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(60% 50% at 50% 42%, rgba(139, 124, 246, 0.16), transparent 70%),
+    var(--bg-0);
+}
+.intro-inner { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 24px; }
+.intro-mark { width: 132px; height: 132px; filter: drop-shadow(0 0 26px rgba(139, 124, 246, 0.5)); }
+.intro-word {
+  font-size: 44px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+.intro-word span {
+  background: linear-gradient(94deg, var(--accent-2), var(--water));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.intro-tag { color: var(--ink-3); font-size: 14px; letter-spacing: 0.02em; }
+.intro-rule {
+  width: min(360px, 60vw);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-line), transparent);
+  transform-origin: center;
+}
+.intro-skip {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-top: 6px;
+}
+
+/* ── micro-interactions ─────────────────────────────────────────────────────── */
+.ghost-btn, .solid-btn, .example, .command-run {
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease),
+              color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.solid-btn:hover:not(:disabled) { box-shadow: 0 8px 26px -12px var(--accent); }
+.command-run:not(:disabled):hover { box-shadow: 0 8px 26px -12px var(--accent); }
+.example:hover { border-color: var(--accent-line); color: var(--ink); }
+
+:where(button, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* A running system says so with a pulse rather than only a colour, which a projector at
+   a booth may not reproduce faithfully. */
+.pill-wait .dot, .dstatus.busy .dpulse {
+  animation: pulse-dot 1.3s var(--ease-in-out) infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.72); }
+}
+
+/* Shimmer instead of a dead grey block, so a wait reads as work rather than a stall. */
+.skel {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+}
+.skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, rgba(255, 255, 255, 0.055) 50%, transparent 75%);
+  transform: translateX(-100%);
+  animation: sweep 1.4s var(--ease-in-out) infinite;
+}
+
+/* ── the accessibility floor ────────────────────────────────────────────────── */
+/* MotionConfig handles the Framer-driven motion; this covers the CSS keyframes it does
+   not own. Anything that loops forever is stopped outright rather than shortened. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .frame-scan, .command-scan, .kpi-sheen, .skel::after { display: none; }
+  .side { transition: none; }
 }
